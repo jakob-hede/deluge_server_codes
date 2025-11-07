@@ -1,19 +1,7 @@
 from __future__ import annotations
 from typing import Generator, Any
-
 from twisted.internet import reactor, defer, task
-from executin.logge import Loggor
-
-
-class Twistee:
-    def __init__(self):
-        super().__init__()
-        self.loggor = Loggor(klass=self.__class__)
-
-    @defer.inlineCallbacks
-    def main_reactize_func(self) -> Generator[Any, Any, dict]:
-        self.loggor.exclaim('reactize')
-        raise NotImplementedError('main_reactize_func must be implemented by subclass')
+from twistin.twistee import Twistee
 
 
 class TwisteeExample1(Twistee):

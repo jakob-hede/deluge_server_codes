@@ -4,7 +4,8 @@ from pathlib import Path
 
 import import_helpor  # noqa NEEDED!!!
 from executin.logge import TestLoggor, Loggor
-from twistin.example_twistee import Twistee, TwisteeExample1
+from twistin.example_twistee import TwisteeExample1
+from twistin.twistee import Twistee
 from twistin.twistor import Twistor, Twistor2, Twistor3
 
 
