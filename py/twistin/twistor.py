@@ -3,7 +3,7 @@ from typing import Generator, Any
 
 from twisted.internet import reactor, defer, task
 from executin.logge import Loggor
-from twistin.twistee import Twistee, TwisteeProtocol
+from twistin.twistee import TwisteeProtocol
 from twistin.exceptions import TwistinException, TwistinTestException
 
 
