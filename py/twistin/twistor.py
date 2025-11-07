@@ -1,21 +1,27 @@
 from __future__ import annotations
-from typing import Generator, Any, Callable
+from typing import Generator, Any, Callable, cast
 
 from twisted.internet import defer  # , task, reactor
 from twisted.internet import reactor
 from twisted.internet.interfaces import IReactorTime
 
 from executin.logge import Loggor
-from twistin.twistee import TwisteeProtocol
+from twistin.twistee import TwisteeProtocol, DummyTwistee
 from twistin.exceptions import TwistinException, TwistinTestException
+
+_DEFAULT_REACTOR: IReactorTime = cast(IReactorTime, cast(object, reactor))
 
 
 class Twistor:
     def __init__(self, twistee: TwisteeProtocol):
         super().__init__()
         self.loggor = Loggor(klass=self.__class__)
-        self.reactor_clock: IReactorTime = reactor
-        self.main_reactize_func: Callable = None  # To be set by subclass
+        # self.reactor_clock: IReactorTime = cast(IReactorTime, reactor)  # ty pe: ignore
+        # Preferred: intermediate cast to object to satisfy strict checkers
+        # self.reactor_clock: IReactorTime = cast(IReactorTime, cast(object, reactor))
+        self.reactor_clock: IReactorTime = _DEFAULT_REACTOR
+
+        self.main_reactize_func: Callable = DummyTwistee().main_reactize_func  # To be set by subclass
 
         # Runtime check if using @runtime_checkable
         if not isinstance(twistee, TwisteeProtocol):
@@ -60,7 +66,7 @@ class Twistor:
         self.loggor.exclaim('Inside main_react_func')
 
         try:
-            result = yield self.main_reactize_func()
+            result = yield self.main_reactize_func(self.reactor_clock)
             self.loggor.info(f'reactize completed with result: {result}')
         except TwistinException as e:
             self.loggor.error(f'reactize failed: {e}')

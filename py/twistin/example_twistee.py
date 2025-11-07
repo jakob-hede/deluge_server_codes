@@ -11,14 +11,14 @@ class TwisteeExample1(Twistee):
         super().__init__()
 
     @defer.inlineCallbacks
-    def main_reactize_func(self) -> Generator[Any, Any, dict]:
-        # def main_reactize_func(self, reactor_clock: IReactorTime) -> Generator[Any, Any, dict]:
+    def main_reactize_func(self, reactor_clock: IReactorTime) -> Generator[Any, Any, dict]:
+        # def main_reactize_func(self) -> Generator[Any, Any, dict]:
         self.loggor.exclaim('main_reactize_func')
         # print('reactize')
         self.loggor.debug('Starting async dummy process...')
         # yield task.deferLater(reactor, 1, lambda: None)
-        from twisted.internet import reactor
-        reactor_clock: IReactorTime = reactor  # ty pe: ignore
+        # from twisted.internet import reactor
+        # reactor_clock: IReactorTime = reactor  # ty pe: ignore
         delay: float = 1
         callee = lambda: None
         yield task.deferLater(reactor_clock, delay, callable=callee)
