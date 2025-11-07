@@ -4,30 +4,7 @@ from typing import Generator, Any
 from twisted.internet import reactor, defer, task
 from executin.logge import Loggor
 from twistin.example_twistee import Twistee
-
-
-class TwistinException(Exception):
-    """Exception raised for errors in the Twistin module."""
-
-    def x__str__(self):
-        super_str = super().__str__()
-        txt = (f"\n- {self.__class__.__name__}:"
-               f"\n\t - args: {self.args}"
-               f"\n\t - super_str: {super_str}"
-               )
-        return txt
-
-    @classmethod
-    def factory_from_exception(cls, e: Exception, *args) -> TwistinException:
-        enfo = f'{e.__class__.__name__}: {e.args}'
-        args_str = ', '.join([str(a) for a in args])
-        exc = cls(f"Wrapped exception: {enfo} |  {args_str}")
-        return exc
-
-
-class TwistinTestException(TwistinException):
-    """Exception raised for transaction errors in the Twistin module."""
-    pass
+from twistin.exceptions import TwistinException, TwistinTestException
 
 
 class Twistor:
@@ -145,8 +122,32 @@ class Twistor2(Twistor):
 class Twistor3(Twistor):
     def __init__(self, twistee: Twistee):
         super().__init__()
-        # self.main_reactize_func = self.reactize  # Bind method for reactor call
-        self.main_reactize_func = twistee.main_reactize_func  # Bind method for reactor call
+        twist_callable = twistee.main_reactize_func
+        # self.main_reactize_func = twistee.main_reactize_func  # Bind method for reactor call
+        # x = self.main_reactize_func
+
+        if not callable(twist_callable):
+            raise TypeError(f"main_reactize_func must be callable, got {type(twist_callable)}")
+
+        # Check if it's an inlineCallbacks generator function
+        import inspect
+        func = twist_callable
+        # For methods, get the underlying function
+        if hasattr(func, '__func__'):
+            func = func.__func__
+
+        # Check if it's a generator function OR if it's wrapped by inlineCallbacks
+        is_generator = inspect.isgeneratorfunction(func)
+        is_inline_callbacks = hasattr(func, '_generator') or (
+                hasattr(func, '__wrapped__') and inspect.isgeneratorfunction(func.__wrapped__)
+        )
+
+        if not (is_generator or is_inline_callbacks):
+            raise TypeError("main_reactize_func must be decorated with @defer.inlineCallbacks (generator function)")
+
+        self.main_reactize_func = twist_callable
+
+        pass
 
     @defer.inlineCallbacks
     def main_react_func(self):
@@ -163,21 +164,6 @@ class Twistor3(Twistor):
             self.loggor.debug('finally block reached')
             reactor.stop()  # noqa
             self.loggor.debug('main_react_func DONE')
-
-    # @defer.inlineCallbacks
-    # def reactize(self) -> Generator[Any, Any, dict]:
-    #     self.loggor.exclaim('reactize')
-    #     # print('reactize')
-    #     self.loggor.debug('Starting async dummy process...')
-    #     yield task.deferLater(reactor, 1, lambda: None)
-    #     self.loggor.debug('Async dummy process completed')
-    #     reply: dict = {'status': 'success', 'duration': 1}
-    #
-    #     # exc = TwistinTestException('Simulated exception in reactize')
-    #     # # exc = Exception('Simulated exception in reactize')
-    #     # raise exc
-    #
-    #     defer.returnValue(reply)
 
 # @classmethod
 # def twist_wrap(cls, function):

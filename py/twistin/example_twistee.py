@@ -15,12 +15,6 @@ class Twistee:
         self.loggor.exclaim('reactize')
         raise NotImplementedError('main_reactize_func must be implemented by subclass')
 
-    # def executize(self):
-    #     self.loggor.exclaim('executize')
-    #     reactor.callWhenRunning(self.main_react_func)
-    #     reactor.run()
-    #     self.loggor.debug('executize DONE')
-
 
 class TwisteeExample1(Twistee):
     def __init__(self):
@@ -35,7 +29,8 @@ class TwisteeExample1(Twistee):
         self.loggor.debug('Async dummy process completed')
         reply: dict = {'status': 'success', 'duration': 1}
 
-        # exc = TwistinTestException('Simulated exception in reactize')
+        # from twistin.exceptions import TwistinTestException
+        # exc = TwistinTestException('Simulated exception in main_reactize_func')
         # # exc = Exception('Simulated exception in reactize')
         # raise exc
 
