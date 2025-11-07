@@ -3,6 +3,8 @@ from typing import Generator, Any
 
 from twisted.internet import reactor, defer, task
 from executin.logge import Loggor
+from twistin.example_twistee import Twistee
+
 
 class TwistinException(Exception):
     """Exception raised for errors in the Twistin module."""
@@ -138,6 +140,44 @@ class Twistor2(Twistor):
             self.loggor.debug('finally block reached')
             reactor.stop()  # noqa
             self.loggor.debug('main_react_func DONE')
+
+
+class Twistor3(Twistor):
+    def __init__(self, twistee: Twistee):
+        super().__init__()
+        # self.main_reactize_func = self.reactize  # Bind method for reactor call
+        self.main_reactize_func = twistee.main_reactize_func  # Bind method for reactor call
+
+    @defer.inlineCallbacks
+    def main_react_func(self):
+        self.loggor.exclaim('Inside main_react_func')
+
+        try:
+            result = yield self.main_reactize_func()
+            self.loggor.info(f'reactize completed with result: {result}')
+        except TwistinException as e:
+            self.loggor.error(f'reactize failed: {e}')
+        except Exception as e:
+            self.loggor.error(f'UNKNOWN reactize failed: {e}')
+        finally:
+            self.loggor.debug('finally block reached')
+            reactor.stop()  # noqa
+            self.loggor.debug('main_react_func DONE')
+
+    # @defer.inlineCallbacks
+    # def reactize(self) -> Generator[Any, Any, dict]:
+    #     self.loggor.exclaim('reactize')
+    #     # print('reactize')
+    #     self.loggor.debug('Starting async dummy process...')
+    #     yield task.deferLater(reactor, 1, lambda: None)
+    #     self.loggor.debug('Async dummy process completed')
+    #     reply: dict = {'status': 'success', 'duration': 1}
+    #
+    #     # exc = TwistinTestException('Simulated exception in reactize')
+    #     # # exc = Exception('Simulated exception in reactize')
+    #     # raise exc
+    #
+    #     defer.returnValue(reply)
 
 # @classmethod
 # def twist_wrap(cls, function):
