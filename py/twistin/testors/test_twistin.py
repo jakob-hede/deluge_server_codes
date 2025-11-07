@@ -25,7 +25,6 @@ class TwistinTestor:
         twistor.executize()
 
 
-
 def main():
     executor = TwistinTestor()
     executor.executize()

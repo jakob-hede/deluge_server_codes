@@ -3,7 +3,7 @@ from typing import Generator, Any
 
 from twisted.internet import reactor, defer, task
 from executin.logge import Loggor
-from twistin.twistee import Twistee  # , TwisteeProtocol
+from twistin.twistee import Twistee, TwisteeProtocol
 from twistin.exceptions import TwistinException, TwistinTestException
 
 
@@ -120,17 +120,13 @@ class Twistor2(Twistor):
 
 
 class Twistor3(Twistor):
-    # def __init__(self, twistee: TwisteeProtocol):
-    #     super().__init__()
-    #
-    #     # Runtime check if using @runtime_checkable
-    #     if not isinstance(twistee, TwisteeProtocol):
-    #         raise TypeError(f"twistee must conform to TwisteeProtocol, got {type(twistee)}")
-    #
-    #     self.main_reactize_func = twistee.main_reactize_func
-
-    def __init__(self, twistee: Twistee):
+    def __init__(self, twistee: TwisteeProtocol):
         super().__init__()
+
+        # Runtime check if using @runtime_checkable
+        if not isinstance(twistee, TwisteeProtocol):
+            raise TypeError(f"twistee must conform to TwisteeProtocol, got {type(twistee)}")
+
         twist_callable = twistee.main_reactize_func
         # self.main_reactize_func = twistee.main_reactize_func  # Bind method for reactor call
         # x = self.main_reactize_func
