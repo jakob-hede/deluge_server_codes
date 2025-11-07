@@ -6,7 +6,7 @@ import import_helpor  # noqa NEEDED!!!
 from executin.logge import TestLoggor, Loggor
 from twistin.example_twistee import TwisteeExample1
 from twistin.twistee import Twistee
-from twistin.twistor import Twistor, Twistor2, Twistor3
+from twistin.twistor import Twistor
 
 
 class TwistinTestor:
@@ -21,7 +21,7 @@ class TwistinTestor:
     def executize(self):
         self.loggor.exclaim('executize')
         twistee: Twistee = TwisteeExample1()
-        twistor = Twistor3(twistee)
+        twistor = Twistor(twistee)
         twistor.executize()
 
 
