@@ -1,27 +1,21 @@
 from __future__ import annotations
-from typing import Generator, Any
+from typing import Generator, Any, Callable
 
-from twisted.internet import reactor, defer, task
+from twisted.internet import defer  # , task, reactor
+from twisted.internet import reactor
+from twisted.internet.interfaces import IReactorTime
+
 from executin.logge import Loggor
 from twistin.twistee import TwisteeProtocol
 from twistin.exceptions import TwistinException, TwistinTestException
 
 
-class BaseTwistor:
-    def __init__(self):
-        super().__init__()
-        self.loggor = Loggor(klass=self.__class__)
-
-    def executize(self):
-        self.loggor.exclaim('executize')
-        reactor.callWhenRunning(self.main_react_func)
-        reactor.run()
-        self.loggor.debug('executize DONE')
-
-
-class Twistor(BaseTwistor):
+class Twistor:
     def __init__(self, twistee: TwisteeProtocol):
         super().__init__()
+        self.loggor = Loggor(klass=self.__class__)
+        self.reactor_clock: IReactorTime = reactor
+        self.main_reactize_func: Callable = None  # To be set by subclass
 
         # Runtime check if using @runtime_checkable
         if not isinstance(twistee, TwisteeProtocol):
@@ -54,8 +48,15 @@ class Twistor(BaseTwistor):
 
         pass
 
+    def executize(self):
+        self.loggor.exclaim('executize')
+        # reactor.callWhenRunning(self.main_reactize_func, self.reactor_clock)
+        self.reactor_clock.callWhenRunning(self.execute_reactize)
+        self.reactor_clock.run()
+        self.loggor.debug('executize DONE')
+
     @defer.inlineCallbacks
-    def main_react_func(self):
+    def execute_reactize(self):
         self.loggor.exclaim('Inside main_react_func')
 
         try:
