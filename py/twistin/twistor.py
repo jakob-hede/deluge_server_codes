@@ -96,7 +96,7 @@ class Twistor:
 #         self.loggor.exclaim('Inside main_react_func')
 #
 #         @defer.inlineCallbacks
-#         def reactize() -> Generator[Any, Any, dict]:
+#         def reactize() -> Generator[Any, Any, TwistResponse]:
 #             print('reactize')
 #
 #             # Simulate an async operation that takes 2 seconds
@@ -164,7 +164,7 @@ class Twistor:
 #         self.loggor.exclaim('Inside main_react_func')
 #
 #         @defer.inlineCallbacks
-#         def reactize() -> Generator[Any, Any, dict]:
+#         def reactize() -> Generator[Any, Any, TwistResponse]:
 #             self.loggor.exclaim('reactize')
 #             # print('reactize')
 #             self.loggor.debug('Starting async dummy process...')

@@ -3,6 +3,7 @@ from typing import Generator, Any
 from twisted.internet import defer, task
 from twisted.internet.interfaces import IReactorTime
 
+from twistin.response import TwistResponse
 from twistin.twistee import Twistee
 
 
@@ -11,8 +12,8 @@ class TwisteeExample1(Twistee):
         super().__init__()
 
     @defer.inlineCallbacks
-    def main_reactize_func(self, reactor_clock: IReactorTime) -> Generator[Any, Any, dict]:
-        # def main_reactize_func(self) -> Generator[Any, Any, dict]:
+    def main_reactize_func(self, reactor_clock: IReactorTime) -> Generator[Any, Any, TwistResponse]:
+        # def main_reactize_func(self) -> Generator[Any, Any, TwistResponse]:
         self.loggor.exclaim('main_reactize_func')
         # print('reactize')
         self.loggor.debug('Starting async dummy process...')
@@ -23,14 +24,15 @@ class TwisteeExample1(Twistee):
         callee = lambda: None
         yield task.deferLater(reactor_clock, delay, callable=callee)
         self.loggor.debug('Async dummy process completed')
-        reply: dict = {'status': 'success', 'duration': 1}
+        reply_dict: dict = {'status': 'success', 'duration': 1}
+        response = TwistResponse(result=reply_dict)
 
         # from twistin.exceptions import TwistinTestException
         # exc = TwistinTestException('Simulated exception in main_reactize_func')
         # # exc = Exception('Simulated exception in reactize')
         # raise exc
 
-        defer.returnValue(reply)
+        defer.returnValue(response)
 
 """
 def deferLater(
