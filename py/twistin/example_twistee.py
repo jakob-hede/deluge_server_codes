@@ -12,9 +12,9 @@ class TwisteeExample1(Twistee):
         super().__init__()
 
     @defer.inlineCallbacks
-    def main_reactize_func(self, reactor_clock: IReactorTime) -> Generator[Any, Any, TwistResponse]:
-        # def main_reactize_func(self) -> Generator[Any, Any, TwistResponse]:
-        self.loggor.exclaim('main_reactize_func')
+    def main_twistee_func(self, reactor_clock: IReactorTime) -> Generator[Any, Any, TwistResponse]:
+        # def main_twistee_func(self) -> Generator[Any, Any, TwistResponse]:
+        self.loggor.exclaim('main_twistee_func')
         # print('reactize')
         self.loggor.debug('Starting async dummy process...')
         # yield task.deferLater(reactor, 1, lambda: None)
@@ -28,7 +28,7 @@ class TwisteeExample1(Twistee):
         response = TwistResponse(result=reply_dict)
 
         # from twistin.exceptions import TwistinTestException
-        # exc = TwistinTestException('Simulated exception in main_reactize_func')
+        # exc = TwistinTestException('Simulated exception in main_twistee_func')
         # # exc = Exception('Simulated exception in reactize')
         # raise exc
 

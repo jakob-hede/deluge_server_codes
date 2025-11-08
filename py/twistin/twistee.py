@@ -10,6 +10,14 @@ from executin.logge import Loggor
 from twistin.response import TwistResponse
 
 
+# TwisteeProtocol shall be a Protocol with method main_twistee_func
+@runtime_checkable
+class TwisteeProtocol(Protocol):
+    def main_twistee_func(self, reactor_clock: IReactorTime) -> Generator[Any, Any, TwistResponse]:
+        # def main_twistee_func(self) -> Generator[Any, Any, TwistResponse]:
+        ...
+
+
 class Twistee(ABC):
     def __init__(self):
         super().__init__()
@@ -17,11 +25,11 @@ class Twistee(ABC):
 
     @abstractmethod
     @defer.inlineCallbacks
-    def main_reactize_func(self, reactor_clock: IReactorTime) -> Generator[Any, Any, TwistResponse]:
-        # def main_reactize_func(self) -> Generator[Any, Any, TwistResponse]:
+    def main_twistee_func(self, reactor_clock: IReactorTime) -> Generator[Any, Any, TwistResponse]:
+        # def main_twistee_func(self) -> Generator[Any, Any, TwistResponse]:
         ...
-        # self.loggor.exclaim('main_reactize_func')
-        # raise NotImplementedError('main_reactize_func must be implemented by subclass')
+        # self.loggor.exclaim('main_twistee_func')
+        # raise NotImplementedError('main_twistee_func must be implemented by subclass')
 
 
 class DummyTwistee(Twistee):
@@ -29,14 +37,6 @@ class DummyTwistee(Twistee):
         super().__init__()
 
     @defer.inlineCallbacks
-    def main_reactize_func(self, reactor_clock: IReactorTime) -> Generator[Any, Any, TwistResponse]:
-        # def main_reactize_func(self) -> Generator[Any, Any, TwistResponse]:
-        raise NotImplementedError('DummyTwistee main_reactize_func not implemented')
-
-
-# TwisteeProtocol shall be a Protocol with method main_reactize_func
-@runtime_checkable
-class TwisteeProtocol(Protocol):
-    def main_reactize_func(self, reactor_clock: IReactorTime) -> Generator[Any, Any, TwistResponse]:
-        # def main_reactize_func(self) -> Generator[Any, Any, TwistResponse]:
-        ...
+    def main_twistee_func(self, reactor_clock: IReactorTime) -> Generator[Any, Any, TwistResponse]:
+        # def main_twistee_func(self) -> Generator[Any, Any, TwistResponse]:
+        raise NotImplementedError('DummyTwistee main_twistee_func not implemented')

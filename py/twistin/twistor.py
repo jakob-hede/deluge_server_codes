@@ -22,18 +22,18 @@ class Twistor:
         # self.reactor_clock: IReactorTime = cast(IReactorTime, cast(object, reactor))
         self.reactor_clock: IReactorTime = _DEFAULT_REACTOR
 
-        self.main_reactize_func: Callable = DummyTwistee().main_reactize_func  # To be set by subclass
+        self.main_twistee_func: Callable = DummyTwistee().main_twistee_func  # To be set by subclass
 
         # Runtime check if using @runtime_checkable
         if not isinstance(twistee, TwisteeProtocol):
             raise TypeError(f"twistee must conform to TwisteeProtocol, got {type(twistee)}")
 
-        twist_callable = twistee.main_reactize_func
-        # self.main_reactize_func = twistee.main_reactize_func  # Bind method for reactor call
-        # x = self.main_reactize_func
+        twist_callable = twistee.main_twistee_func
+        # self.main_twistee_func = twistee.main_twistee_func  # Bind method for reactor call
+        # x = self.main_twistee_func
 
         if not callable(twist_callable):
-            raise TypeError(f"main_reactize_func must be callable, got {type(twist_callable)}")
+            raise TypeError(f"main_twistee_func must be callable, got {type(twist_callable)}")
 
         # Check if it's an inlineCallbacks generator function
         import inspect
@@ -49,15 +49,15 @@ class Twistor:
         )
 
         if not (is_generator or is_inline_callbacks):
-            raise TypeError("main_reactize_func must be decorated with @defer.inlineCallbacks (generator function)")
+            raise TypeError("main_twistee_func must be decorated with @defer.inlineCallbacks (generator function)")
 
-        self.main_reactize_func = twist_callable
+        self.main_twistee_func = twist_callable
 
         pass
 
     def executize(self):
         self.loggor.exclaim('executize')
-        # reactor.callWhenRunning(self.main_reactize_func, self.reactor_clock)
+        # reactor.callWhenRunning(self.main_twistee_func, self.reactor_clock)
         startup_tuple = self.reactor_clock.callWhenRunning(self.execute_reactize)
         self.reactor_clock.run()
         self.loggor.debug(f'executize completed with startup_tuple: {startup_tuple}')
@@ -69,7 +69,7 @@ class Twistor:
 
         response = TwistResponse()
         try:
-            response = yield self.main_reactize_func(self.reactor_clock)
+            response = yield self.main_twistee_func(self.reactor_clock)
             self.loggor.info(f'reactize completed with result: {response}')
         except TwistinException as e:
             self.loggor.error(f'reactize failed: {e}')
