@@ -6,6 +6,7 @@ from twisted.internet import reactor
 from twisted.internet.interfaces import IReactorTime
 
 from executin.logge import Loggor
+from twistin.response import TwistResponse
 from twistin.twistee import TwisteeProtocol, DummyTwistee
 from twistin.exceptions import TwistinException, TwistinTestException
 
@@ -57,17 +58,19 @@ class Twistor:
     def executize(self):
         self.loggor.exclaim('executize')
         # reactor.callWhenRunning(self.main_reactize_func, self.reactor_clock)
-        self.reactor_clock.callWhenRunning(self.execute_reactize)
+        startup_tuple = self.reactor_clock.callWhenRunning(self.execute_reactize)
         self.reactor_clock.run()
-        self.loggor.debug('executize DONE')
+        self.loggor.debug(f'executize completed with startup_tuple: {startup_tuple}')
+        self.loggor.info('executize DONE')
 
     @defer.inlineCallbacks
-    def execute_reactize(self):
+    def execute_reactize(self) -> Generator[Any, Any, TwistResponse]:
         self.loggor.exclaim('Inside main_react_func')
 
+        response = TwistResponse()
         try:
-            result = yield self.main_reactize_func(self.reactor_clock)
-            self.loggor.info(f'reactize completed with result: {result}')
+            response = yield self.main_reactize_func(self.reactor_clock)
+            self.loggor.info(f'reactize completed with result: {response}')
         except TwistinException as e:
             self.loggor.error(f'reactize failed: {e}')
         except Exception as e:
@@ -76,6 +79,7 @@ class Twistor:
             self.loggor.debug('finally block reached')
             reactor.stop()  # noqa
             self.loggor.debug('main_react_func DONE')
+            defer.returnValue(response)
 
 # @classmethod
 # def twist_wrap(cls, function):
