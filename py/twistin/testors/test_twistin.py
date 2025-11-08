@@ -3,8 +3,8 @@
 from pathlib import Path
 
 import import_helpor  # noqa NEEDED!!!
-from executin.logge import TestLoggor, Loggor
-from twistin.example_twistee import TwisteeExample1
+from executin.logge import Loggor
+from twistin.twistees.example_twistee import TwisteeExample1
 from twistin.twistee import Twistee
 from twistin.twistor import Twistor
 

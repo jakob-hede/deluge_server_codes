@@ -1,7 +1,7 @@
 class TwistResponse:
-    def __init__(self, result=None, error: Exception = None) -> None:
-        self.result = result
-        self.error = error
+    def __init__(self, result: dict | None = None, error: Exception | None = None) -> None:
+        self.result: dict | None = result
+        self.error: Exception | None = error
 
     def __str__(self) -> str:
         txt = ""
