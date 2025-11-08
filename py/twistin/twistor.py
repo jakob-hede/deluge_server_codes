@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import Generator, Any, Callable, cast
 
 from twisted.internet import defer  # , task, reactor
-from twisted.internet import reactor
+from twisted.internet import reactor as real_reactor
 from twisted.internet.interfaces import IReactorTime
 
 from executin.logge import Loggor
@@ -10,7 +10,7 @@ from twistin.response import TwistResponse
 from twistin.twistee import TwisteeProtocol, DummyTwistee
 from twistin.exceptions import TwistinException, TwistinTestException
 
-_DEFAULT_REACTOR: IReactorTime = cast(IReactorTime, cast(object, reactor))
+_DEFAULT_REACTOR: IReactorTime = cast(IReactorTime, cast(object, real_reactor))
 
 
 class Twistor:
@@ -77,7 +77,7 @@ class Twistor:
             self.loggor.error(f'UNKNOWN reactize failed: {e}')
         finally:
             self.loggor.debug('finally block reached')
-            reactor.stop()  # noqa
+            self.reactor_clock.stop()
             self.loggor.debug('main_react_func DONE')
             defer.returnValue(response)
 
