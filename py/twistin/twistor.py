@@ -58,7 +58,8 @@ class Twistor:
     def executize(self):
         self.loggor.exclaim('executize')
         # reactor.callWhenRunning(self.main_twistee_func, self.reactor_clock)
-        startup_tuple = self.reactor_clock.callWhenRunning(self.execute_reactize)
+        reactizor = self.execute_reactize
+        startup_tuple = self.reactor_clock.callWhenRunning(reactizor)
         self.reactor_clock.run()
         self.loggor.debug(f'executize completed with startup_tuple: {startup_tuple}')
         self.loggor.info('executize DONE')
