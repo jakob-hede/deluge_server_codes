@@ -71,6 +71,11 @@ class Twistor:
         # return response  # type: ignore
         # # return self._response if self._response is not None else TwistResponse()
 
+    def stopize(self) -> None:
+        self.loggor.exclaim('stopize')
+        self.reactor_clock.stop()
+        self.loggor.info('stopize DONE')
+
 
     @defer.inlineCallbacks
     def execute_reactize(self) -> Generator[Any, Any, None]:

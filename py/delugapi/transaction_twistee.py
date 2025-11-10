@@ -1,13 +1,14 @@
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from typing import Generator, Any, TYPE_CHECKING
 
 from twisted.internet import defer
 from twisted.internet.interfaces import IReactorTime
 
-from delugapi.transaction import DelugApiTransaction, DelugApiStatusTransaction
-from deluge.ui.client import client as ui_client
 from delugapi.response import DelugApiResponse
-from twistin import Twistee, TwistResponse
+from delugapi.transaction import DelugApiTransaction, DelugApiStatusTransaction
+from delugapi.twistin_adaptors import DelugApiTwistee
+from deluge.ui.client import client as ui_client
+# from twistin import TwistResponse
 
 if TYPE_CHECKING:
     from delugapi import DelugApi as DelugApiType
@@ -15,7 +16,7 @@ else:
     DelugApiType = 'DelugApi'
 
 
-class DelugApiTransactionTwistee(Twistee):
+class DelugApiTransactionTwistee(DelugApiTwistee):
     def __init__(self, api: DelugApiType, transaction: DelugApiTransaction) -> None:
         super().__init__()
         self.api: DelugApiType = api
@@ -23,22 +24,8 @@ class DelugApiTransactionTwistee(Twistee):
 
     @abstractmethod
     @defer.inlineCallbacks
-    def main_twistee_func(self, reactor_clock: IReactorTime) -> Generator[Any, Any, TwistResponse]:
+    def main_twistee_func(self, reactor_clock: IReactorTime) -> Generator[Any, Any, DelugApiResponse]:
         ...
-
-    # def main_twistee_func(self, reactor_clock: IReactorTime) -> Generator[Any, Any, TwistResponse]:
-    #     pass
-
-    #     print(f"{self.__class__.__name__} initialized")
-    #     self.response: DelugApiResponse = DelugApiResponse()
-    #
-    # def __str__(self) -> str:
-    #     txt = f"<{self.__class__.__name__}>"
-    #     return txt
-    #
-    # @abstractmethod
-    # def executize(self) -> Generator[Any, Any, dict]:
-    #     raise NotImplementedError  # pragma: no cover
 
 
 class DelugApiStatusTransactionTwistee(DelugApiTransactionTwistee):
@@ -59,20 +46,10 @@ class DelugApiStatusTransactionTwistee(DelugApiTransactionTwistee):
         self.torrent_id: str = torrent_id
 
     @defer.inlineCallbacks
-    def main_twistee_func(self, reactor_clock: IReactorTime) -> Generator[Any, Any, TwistResponse]:
+    def main_twistee_func(self, reactor_clock: IReactorTime) -> Generator[Any, Any, DelugApiResponse]:
         self.loggor.exclaim('main_twistee_func')
-
         status_dict = yield self.api.transactize(self.transaction)
-        response = TwistResponse(result=status_dict)
-        pass
-
-        # self.loggor.debug('Starting async MAIN STATUS process...')
-        # results_dict: dict = {}
-        # response = TwistResponse(result=results_dict)
-        # for test_name in 'A B C'.split():
-        #     self.loggor.debug(f'Processing test: {test_name}')
-        #     sub_response = yield self.test_subfunc(reactor_clock, test_name)
-        #     results_dict[test_name] = sub_response.result
+        response = DelugApiResponse(result=status_dict)
         defer.returnValue(response)
 
     @defer.inlineCallbacks
@@ -95,22 +72,3 @@ class DelugApiStatusTransactionTwistee(DelugApiTransactionTwistee):
         reply_dict: dict = yield ui_client.core.get_torrents_status(filter_dict, keys)
         print(f'return reply_dict: {str(reply_dict)[:100]}...')
         return reply_dict
-
-# class DelugApiMoveTransaction(DelugApiTransactionTwistee):
-#     def __init__(self, torrent_id: str, destination: str) -> None:
-#         super().__init__()
-#         self.torrent_id: str = torrent_id
-#         self.destination: str = destination
-#
-#     @defer.inlineCallbacks
-#     def executize(self) -> Generator[Any, Any, dict]:  # noqa
-#         print(f"executize {self.__class__.__name__}...")
-#         reply: dict = yield self.fetch_move()
-#         defer.returnValue(reply)
-#
-#     @defer.inlineCallbacks
-#     def fetch_move(self) -> Generator[Any, Any, dict]:
-#         print("coring...")
-#         torrent_ids: list[str] = [self.torrent_id]
-#         reply_dict: dict = yield ui_client.core.move_storage(torrent_ids, self.destination)
-#         defer.returnValue(reply_dict)

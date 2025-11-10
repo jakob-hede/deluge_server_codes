@@ -5,11 +5,13 @@ from twisted.internet import defer  # , reactor  # noqa
 
 from Salaisuudet.secrets import Secretor
 from .delugapi import DelugApi
-from .transaction import DelugApiStatusTransaction, DelugApiMoveTransaction
-from .response import DelugApiResponse
+from .transaction import DelugApiStatusTransaction, DelugApiMoveTransaction, DelugApiTransaction
+from .response import DelugApiResponse, IncompleteDelugApiResponse
 from executin.logge import DelugapiClientLoggor
 
 from .torrent import DelugapiTorrent
+from .transaction_twistee import DelugApiStatusTransactionTwistee
+from .twistin_adaptors import DelugApiTwistee, DelugApiTwistor, ReactorType
 
 
 # from executin.torrentor import Torrentor
@@ -107,65 +109,99 @@ class DelugapiClient:
         print("DelugapiClient test2_status method called")
         self.reaction_response = DelugApiResponse()
         DelugApi.delugapi_wrap(self.get_status_wrapped)  # Wrap the call to run in reactor
-        self.handle_reaction_response()
+        self.handle_status_reaction_response()
         return self.reaction_response
 
     def test5_status(self) -> DelugApiResponse:
         self.loggor.exclaim('DelugapiClient test5_status method called')
         self.reaction_response = DelugApiResponse()
-
-        # transaction = DelugApiStatusTransaction()
-
-
-
-        # reply = yield self.api.transactize(transaction)
-        # transaction_response = transaction.response
-        # print(f"transaction_response: {transaction_response}")
-
-        # # DelugApi.delugapi_wrap(self.get_status_wrapped)  # Wrap the call to run in reactor
-        # # self.handle_reaction_response()
-        #
-        # # transaction = DelugApiStatusTransaction()
-        from twistin import Twistee, TwistResponse
-        from twistin import Twistor
-        from delugapi.transaction_twistee import DelugApiStatusTransactionTwistee
-        #
-        twistee: Twistee = DelugApiStatusTransactionTwistee(self.api)
-        twistor = Twistor(twistee)
-        #
-        # # twistee: Twistee = TwisteeExample2()
-        # # twistor = Twistor(twistee)
-        response: TwistResponse = twistor.executize()
+        # from twistin import Twistee, TwistResponse
+        # from twistin import Twistor
+        # from delugapi.transaction_twistee import DelugApiStatusTransactionTwistee
+        twistee: DelugApiTwistee = DelugApiStatusTransactionTwistee(self.api)
+        # twistor = DelugApiTwistor(twistee)
+        # response: DelugApiResponse = twistor.executize()
+        # self.reaction_response = response
+        # self.handle_status_reaction_response()
+        # return response
+        response = self.twistorize(twistee)
         self.reaction_response = response
-        # print(f'Final Response.result: {response.result}')
-        # self.loggor.debug(f'Final Response: {response}')
-        # if response.is_valid:
-        #     self.loggor.info('TwistinTestor.executize SUCCESS')
-        #     for key, value in response.result.items():
-        #         self.loggor.info(f'  - {key}: {value}')
-        # else:
-        #     self.loggor.error('TwistinTestor.executize FAILURE')
-        #     self.loggor.error(f'Response: {response}')
-
-
-        pass
-        # reply = yield self.api.transactize(transaction)
-        # transaction_response = transaction.response
-        # print(f"transaction_response: {transaction_response}")
-        #
-        # self.reaction_response.result = transaction_response.result
-        # self.reaction_response.error = transaction_response.error
-        #
-        # # reactor.stop()  # noqa
-        # DelugApi.delugapi_stop()
-        # return self.reaction_response
-        self.handle_reaction_response()
+        self.handle_status_reaction_response()
         return response
+
+    def test6_id_status(self) -> DelugApiResponse:
+        api = self.api
+        # , torrent_id: str = ''
+
+        class Test6Twistee(DelugApiTwistee):
+            def __init__(self) -> None:
+                super().__init__()
+                self.transaction: DelugApiTransaction = DelugApiStatusTransaction(torrent_id='')
+
+            # @abstractmethod
+            @defer.inlineCallbacks
+            def main_twistee_func(self, reactor_clock: ReactorType) -> Generator[Any, Any, DelugApiResponse]:
+                status_dict = yield api.transactize(self.transaction)
+                response = DelugApiResponse(result=status_dict)
+                sample_id = self.handle_status_reaction_response(response)
+                sub_transaction: DelugApiTransaction = DelugApiStatusTransaction(torrent_id=sample_id)
+                transaction_status_dict = yield api.transactize(sub_transaction)
+                sample_status_dict = transaction_status_dict.get(sample_id, {})
+                name = sample_status_dict.get('name', '')
+                self.loggor.remark(f'Sample Torrent Name for id="{sample_id}": {name}')
+                defer.returnValue(response)
+
+            def handle_status_reaction_response(self, response):
+                print(f"response: {response}")
+                sample_id = ''
+                if response.is_ok and isinstance(response.result, dict):
+                    self.loggor.remark('Torrents Status:')
+                    for indx, (torrent_id, torrent_dict) in enumerate(response.result.items()):
+                        label = torrent_dict["label"]
+                        label_part = f'  label: "{label}"  ' if label else ''
+                        name = torrent_dict['name']
+                        truncated_name = f'{name[:36]} ...' if len(name) > 40 else name
+                        self.loggor.info(
+                            f' - {indx:03d}:'
+                            f'{label_part:<20}'
+                            f'name: "{truncated_name}"'
+                            # f')'
+                        )
+                        if indx < 1:
+                            sample_id = torrent_id
+                        elif indx > 5:
+                            print('...')
+                            break
+                self.loggor.remark(f'sample_id: "{sample_id}"')
+                return sample_id
+
+        self.loggor.exclaim('DelugapiClient test6_id_status method called')
+        self.reaction_response = IncompleteDelugApiResponse()
+        # twistee: DelugApiTwistee = DelugApiStatusTransactionTwistee(self.api)
+        twistee: DelugApiTwistee = Test6Twistee()
+        self.reaction_response = self.twistorize(twistee)
+        # self.handle_status_reaction_response()
+        return self.reaction_response
 
 
         return self.reaction_response
 
-    def handle_reaction_response(self):
+
+    #     self.loggor.exclaim('DelugapiClient test6_id_status method called')
+    #     self.reaction_response = DelugApiResponse()  # dummy init
+    #     twistee: DelugApiTwistee = DelugApiStatusTransactionTwistee(self.api, torrent_id=torrent_id)
+    #     response = self.twistorize(twistee)
+    #     self.reaction_response = response
+    #     self.handle_status_reaction_response()
+    #     return response
+
+    def twistorize(self, twistee: DelugApiTwistee) -> DelugApiResponse:
+        self.loggor.exclaim(f'DelugapiClient twistorize method called for {twistee.__class__.__name__}')
+        twistor = DelugApiTwistor(twistee)
+        response: DelugApiResponse = twistor.executize()
+        return response
+
+    def handle_status_reaction_response(self):
         response = self.reaction_response
         print(f"response: {response}")
         # dumps_dir = Path('/opt/projects/deluge_source_project/data/dumps')

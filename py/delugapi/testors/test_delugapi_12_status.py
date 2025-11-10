@@ -24,7 +24,7 @@ class Testor:
         self.loggor.exclaim("Testor.statusize...")
         from delugapi import DelugapiClient
         client = DelugapiClient()
-        response: DelugApiResponse = client.test5_status()
+        response: DelugApiResponse = client.test6_id_status()
 
         # print(f"FINAL response: {response}")
         def elaborate():
