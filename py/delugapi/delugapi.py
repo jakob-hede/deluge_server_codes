@@ -1,9 +1,12 @@
 from typing import Generator, Any
 
 from twisted.internet import defer, reactor  # noqa
+from twisted.internet.interfaces import IReactorTime
 
+from delugapi.transaction_twistee import DelugApiTransactionTwistee
 from deluge.ui.client import client as ui_client
 from delugapi.transaction import DelugApiTransaction
+from twistin import TwistResponse
 
 
 class DelugApi:
@@ -68,3 +71,19 @@ class DelugApi:
         print("Stopping reactor...")
         reactor.stop()  # noqa
         print("Reactor stopped")
+
+    @classmethod
+    def delugapi_twistorize(cls, function):
+        print(f"delugapi_twistorize {function}")
+        a = reactor.callWhenRunning(function)  # noqa
+        b = reactor.run()  # noqa
+        print("Reactor finished")
+
+
+
+# class DelugApiTransactizeTwistee(DelugApiTransactionTwistee):
+#     @defer.inlineCallbacks
+#     def main_twistee_func(self, reactor_clock: IReactorTime) -> Generator[Any, Any, TwistResponse]:
+#         reply: dict = yield self.transactize()
+#         response = TwistResponse(result=reply)
+#         defer.returnValue(response)

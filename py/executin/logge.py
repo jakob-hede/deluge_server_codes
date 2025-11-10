@@ -30,7 +30,8 @@ class ColorNameEnum(Enum):
 
 
 class CustomFormatter(Formatter):
-    base_format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    # base_format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    base_format = '%(asctime)s - %(name)s - %(levelname)s | %(message)s'
 
     def __init__(self, fmt=None, datefmt=None, style="%", validate=True, *, defaults=None):
         super().__init__(fmt=fmt or self.base_format, datefmt=datefmt, style=style, validate=validate,
@@ -79,7 +80,8 @@ class ColorFormatter(CustomFormatter):
     def __init__(self):
         # super().__init__('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
         gray_code = ColorNameEnum.coded('BOLD_GRAY')
-        fmt = f'{gray_code}%(asctime)s - %(name)s - %(levelname)s - %(message)s{self.RESET}'
+        # fmt = f'{gray_code}%(asctime)s - %(name)s - %(levelname)s - %(message)s{self.RESET}'
+        fmt = f'{gray_code}{self.base_format}{self.RESET}'
         # super().__init__(f'{gray_code}%(asctime)s - %(name)s - %(levelname)s - %(message)s{self.RESET}')
         super().__init__(fmt=fmt)
 

@@ -22,6 +22,7 @@ class DelugApiTransaction(ABC):
         raise NotImplementedError  # pragma: no cover
 
 
+
 class DelugApiStatusTransaction(DelugApiTransaction):
     interesting_keys: list[str] = '''
     name

@@ -4,12 +4,12 @@ class DelugApiResponse:
         self.error = error
 
     def __str__(self) -> str:
-        txt = ""
+        txt = 'EMPTY DelugApiResponse\n'
         if self.error:
-            txt += f"Error: {self.error}\n"
+            txt += f'Error: {self.error}\n'
         if self.result:
             result_str = str(self.result)
-            txt += f"Result: {result_str[:32]} ..."
+            txt += f'Result: {result_str[:32]} ...\n'
         return txt
 
     @property
