@@ -1,3 +1,6 @@
+from twistin.exceptions import TwistinIncompleteException
+
+
 class TwistResponse:
     def __init__(self, result: dict | None = None, error: Exception | None = None) -> None:
         self.result: dict | None = result
@@ -20,3 +23,8 @@ class TwistResponse:
     def is_valid(self) -> bool:
         valid = self.is_ok and isinstance(self.result, dict)
         return valid
+
+
+class IncompleteTwistResponse(TwistResponse):
+    def __init__(self, message: str = "Incomplete TwistResponse") -> None:
+        super().__init__(result=None, error=TwistinIncompleteException(message))

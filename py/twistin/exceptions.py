@@ -23,3 +23,8 @@ class TwistinException(Exception):
 class TwistinTestException(TwistinException):
     """Exception raised for transaction errors in the Twistin module."""
     pass
+
+
+class TwistinIncompleteException(TwistinException):
+    """Exception raised for transaction errors in the Twistin module."""
+    pass

@@ -24,8 +24,15 @@ class TwistinTestor:
         twistee: Twistee = TwisteeExample2()
         twistor = Twistor(twistee)
         response: TwistResponse = twistor.executize()
-        print(f'Final Response: {response.result}')
+        print(f'Final Response.result: {response.result}')
         self.loggor.debug(f'Final Response: {response}')
+        if response.is_valid:
+            self.loggor.info('TwistinTestor.executize SUCCESS')
+            for key, value in response.result.items():
+                self.loggor.info(f'  - {key}: {value}')
+        else:
+            self.loggor.error('TwistinTestor.executize FAILURE')
+            self.loggor.error(f'Response: {response}')
 
 
 def main():

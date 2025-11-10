@@ -6,7 +6,7 @@ from twisted.internet import reactor as real_reactor
 from twisted.internet.interfaces import IReactorTime
 
 from executin.logge import Loggor
-from twistin.response import TwistResponse
+from twistin.response import TwistResponse, IncompleteTwistResponse
 from twistin.twistee import TwisteeProtocol, DummyTwistee
 from twistin.exceptions import TwistinException, TwistinTestException
 
@@ -75,7 +75,7 @@ class Twistor:
     def execute_reactize(self) -> Generator[Any, Any, None]:
         self.loggor.exclaim('Inside main_react_func')
 
-        response = TwistResponse()
+        response = IncompleteTwistResponse('Twistor.execute_reactize No response generated')
         try:
             response = yield self.main_twistee_func(self.reactor_clock)
             self.loggor.info(f'execute_reactize completed with result: {response}')
