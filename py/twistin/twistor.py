@@ -17,7 +17,7 @@ class Twistor:
     def __init__(self, twistee: TwisteeProtocol):
         super().__init__()
         self.loggor = Loggor(klass=self.__class__)
-        self._response: TwistResponse | None = None
+        self._response: TwistResponse = IncompleteTwistResponse('Twistor only initialized, `executize` not run yet')
 
         # self.reactor_clock: IReactorTime = cast(IReactorTime, reactor)  # ty pe: ignore
         # Preferred: intermediate cast to object to satisfy strict checkers
@@ -65,10 +65,11 @@ class Twistor:
         self.reactor_clock.run()
         self.loggor.debug(f'executize completed with startup_tuple: {startup_tuple}')
         self.loggor.info('executize DONE')
-        # response = 'How to get response from reactor run?'  # Placeholder
-        response = self._response if self._response is not None else TwistResponse()
-        return response  # type: ignore
-        # return self._response if self._response is not None else TwistResponse()
+        return self._response
+        # # response = 'How to get response from reactor run?'  # Placeholder
+        # response = self._response if self._response is not None else TwistResponse()
+        # return response  # type: ignore
+        # # return self._response if self._response is not None else TwistResponse()
 
 
     @defer.inlineCallbacks
