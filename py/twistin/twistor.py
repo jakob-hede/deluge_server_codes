@@ -17,6 +17,8 @@ class Twistor:
     def __init__(self, twistee: TwisteeProtocol):
         super().__init__()
         self.loggor = Loggor(klass=self.__class__)
+        self._response: TwistResponse | None = None
+
         # self.reactor_clock: IReactorTime = cast(IReactorTime, reactor)  # ty pe: ignore
         # Preferred: intermediate cast to object to satisfy strict checkers
         # self.reactor_clock: IReactorTime = cast(IReactorTime, cast(object, reactor))
@@ -55,7 +57,7 @@ class Twistor:
 
         pass
 
-    def executize(self):
+    def executize(self)-> TwistResponse:
         self.loggor.exclaim('executize')
         # reactor.callWhenRunning(self.main_twistee_func, self.reactor_clock)
         reactizor = self.execute_reactize
@@ -63,24 +65,30 @@ class Twistor:
         self.reactor_clock.run()
         self.loggor.debug(f'executize completed with startup_tuple: {startup_tuple}')
         self.loggor.info('executize DONE')
+        # response = 'How to get response from reactor run?'  # Placeholder
+        response = self._response if self._response is not None else TwistResponse()
+        return response  # type: ignore
+        # return self._response if self._response is not None else TwistResponse()
+
 
     @defer.inlineCallbacks
-    def execute_reactize(self) -> Generator[Any, Any, TwistResponse]:
+    def execute_reactize(self) -> Generator[Any, Any, None]:
         self.loggor.exclaim('Inside main_react_func')
 
         response = TwistResponse()
         try:
             response = yield self.main_twistee_func(self.reactor_clock)
-            self.loggor.info(f'reactize completed with result: {response}')
+            self.loggor.info(f'execute_reactize completed with result: {response}')
         except TwistinException as e:
-            self.loggor.error(f'reactize failed: {e}')
+            self.loggor.error(f'execute_reactize failed: {e}')
         except Exception as e:
-            self.loggor.error(f'UNKNOWN reactize failed: {e}')
+            self.loggor.error(f'UNKNOWN execute_reactize failed: {e}')
         finally:
             self.loggor.debug('finally block reached')
             self.reactor_clock.stop()
             self.loggor.debug('main_react_func DONE')
-            defer.returnValue(response)
+            self._response = response
+            # defer.returnValue(response)
 
 # @classmethod
 # def twist_wrap(cls, function):

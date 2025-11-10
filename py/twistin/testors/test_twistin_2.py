@@ -4,7 +4,8 @@ from pathlib import Path
 
 import import_helpor  # noqa NEEDED!!!
 from executin.logge import Loggor
-from twistin.twistees.example_twistee_1 import TwisteeExample1
+from twistin import TwistResponse
+from twistin.twistees.example_twistee_2 import TwisteeExample2
 from twistin.twistee import Twistee
 from twistin.twistor import Twistor
 
@@ -20,9 +21,11 @@ class TwistinTestor:
 
     def executize(self):
         self.loggor.exclaim('executize')
-        twistee: Twistee = TwisteeExample1()
+        twistee: Twistee = TwisteeExample2()
         twistor = Twistor(twistee)
-        twistor.executize()
+        response: TwistResponse = twistor.executize()
+        print(f'Final Response: {response.result}')
+        self.loggor.debug(f'Final Response: {response}')
 
 
 def main():
