@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from pathlib import Path
 import import_helpor  # noqa NEEDED!!!
+from delugapi.delugapi_client import DelugapiTestClient
 from delugapi.response import DelugApiResponse
 from executin.logge import Loggor
 
@@ -22,8 +23,8 @@ class Testor:
 
     def statusize(self):
         self.loggor.exclaim("Testor.statusize...")
-        from delugapi import DelugapiClient
-        client = DelugapiClient()
+        # from delugapi import DelugapiClient
+        client = DelugapiTestClient()
         response: DelugApiResponse = client.test6_id_status()
 
         # print(f"FINAL response: {response}")

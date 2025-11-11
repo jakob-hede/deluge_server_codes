@@ -11,7 +11,8 @@ from executin.logge import DelugapiClientLoggor
 
 from .torrent import DelugapiTorrent
 from .transaction_twistee import DelugApiStatusTransactionTwistee
-from .twistin_adaptors import DelugApiTwistee, DelugApiTwistor, ReactorInterface, defer_inline_callbacks, defer_return_value
+from .twistin_adaptors import DelugApiTwistee, DelugApiTwistor, ReactorInterface, defer_inline_callbacks, \
+    defer_return_value
 
 
 # from executin.torrentor import Torrentor
@@ -48,6 +49,72 @@ class DelugapiClient:
         response = self.reaction_response
         return response
 
+    def twistorize(self, twistee: DelugApiTwistee) -> DelugApiResponse:
+        self.loggor.exclaim(f'DelugapiClient twistorize method called for {twistee.__class__.__name__}')
+        twistor = DelugApiTwistor(twistee)
+        response: DelugApiResponse = twistor.executize()
+        return response
+
+    def handle_status_reaction_response(self):
+        response = self.reaction_response
+        print(f"response: {response}")
+        # dumps_dir = Path('/opt/projects/deluge_source_project/data/dumps')
+        dumps_dir = self.deluge_root_dir / 'dumps'
+        if response.is_ok and isinstance(response.result, dict):
+            self.loggor.remark('Torrents Status:')
+
+            for indx, (torrent_id, torrent_dict) in enumerate(response.result.items()):
+                label = torrent_dict["label"]
+                label_part = f'  label: "{label}"  ' if label else ''
+                name = torrent_dict['name']
+                truncated_name = f'{name[:36]} ...' if len(name) > 40 else name
+                # name = (torrent_dict['name']).strip()
+                self.loggor.info(
+                    # f' - {indx:03d} TorrentInfo(id={torrent_id[:40]}, '
+                    # f' - {indx:03d}  TorrentInfo:'
+                    f' - {indx:03d}:'
+                    f'{label_part:<20}'
+                    f'name: "{truncated_name}"'
+                    # f')'
+                )
+                if indx < 5:
+                    if dumps_dir.is_dir():
+                        dump_file = dumps_dir / f'torrents_dump_{indx}.json'
+                        dump_json = json.dumps(torrent_dict, indent=4)
+                        dump_file.write_text(dump_json, encoding='utf-8')
+                else:
+                    print('...')
+                    break
+
+    @defer_inline_callbacks
+    def get_status_wrapped(self) -> Generator[Any, Any, dict]:
+        print("DelugapiClient test3_status_wrapped method called")
+        transaction = DelugApiStatusTransaction()
+        reply = yield self.api.transactize(transaction)
+        transaction_response = transaction.response
+        print(f"transaction_response: {transaction_response}")
+
+        self.reaction_response.result = transaction_response.result
+        self.reaction_response.error = transaction_response.error
+
+        # reactor.stop()  # noqa
+        DelugApi.delugapi_stop()
+        return reply
+
+    def move_torrent(self, torrent_id: str, destination: Path):
+        self.loggor.info(
+            f'DelugapiClient move_torrent method called for torrent_id="{torrent_id}" to destination="{destination}"')
+        from executin.commons import Commons
+        if not Commons.singleton.is_at_daemon:
+            self.loggor.warning("Not at daemon, skipping move")
+            return
+        transaction = DelugApiMoveTransaction(torrent_id=torrent_id, destination=str(destination))
+        response = self.api.transactize(transaction)
+        self.loggor.info(f"response: {response}")
+        return response
+
+
+class DelugapiTestClient(DelugapiClient):
     def test3_seasonality(self) -> DelugApiResponse:
 
         print("DelugapiClient test3_seasonality method called")
@@ -129,6 +196,7 @@ class DelugapiClient:
 
     def test6_id_status(self) -> DelugApiResponse:
         api = self.api
+
         # , torrent_id: str = ''
 
         class Test6Twistee(DelugApiTwistee):
@@ -183,9 +251,7 @@ class DelugapiClient:
         # self.handle_status_reaction_response()
         return self.reaction_response
 
-
         return self.reaction_response
-
 
     #     self.loggor.exclaim('DelugapiClient test6_id_status method called')
     #     self.reaction_response = DelugApiResponse()  # dummy init
@@ -194,58 +260,6 @@ class DelugapiClient:
     #     self.reaction_response = response
     #     self.handle_status_reaction_response()
     #     return response
-
-    def twistorize(self, twistee: DelugApiTwistee) -> DelugApiResponse:
-        self.loggor.exclaim(f'DelugapiClient twistorize method called for {twistee.__class__.__name__}')
-        twistor = DelugApiTwistor(twistee)
-        response: DelugApiResponse = twistor.executize()
-        return response
-
-    def handle_status_reaction_response(self):
-        response = self.reaction_response
-        print(f"response: {response}")
-        # dumps_dir = Path('/opt/projects/deluge_source_project/data/dumps')
-        dumps_dir = self.deluge_root_dir / 'dumps'
-        if response.is_ok and isinstance(response.result, dict):
-            self.loggor.remark('Torrents Status:')
-
-            for indx, (torrent_id, torrent_dict) in enumerate(response.result.items()):
-                label = torrent_dict["label"]
-                label_part = f'  label: "{label}"  ' if label else ''
-                name = torrent_dict['name']
-                truncated_name = f'{name[:36]} ...' if len(name) > 40 else name
-                # name = (torrent_dict['name']).strip()
-                self.loggor.info(
-                    # f' - {indx:03d} TorrentInfo(id={torrent_id[:40]}, '
-                    # f' - {indx:03d}  TorrentInfo:'
-                    f' - {indx:03d}:'
-                    f'{label_part:<20}'
-                    f'name: "{truncated_name}"'
-                    # f')'
-                )
-                if indx < 5:
-                    if dumps_dir.is_dir():
-                        dump_file = dumps_dir / f'torrents_dump_{indx}.json'
-                        dump_json = json.dumps(torrent_dict, indent=4)
-                        dump_file.write_text(dump_json, encoding='utf-8')
-                else:
-                    print('...')
-                    break
-
-    @defer_inline_callbacks
-    def get_status_wrapped(self) -> Generator[Any, Any, dict]:
-        print("DelugapiClient test3_status_wrapped method called")
-        transaction = DelugApiStatusTransaction()
-        reply = yield self.api.transactize(transaction)
-        transaction_response = transaction.response
-        print(f"transaction_response: {transaction_response}")
-
-        self.reaction_response.result = transaction_response.result
-        self.reaction_response.error = transaction_response.error
-
-        # reactor.stop()  # noqa
-        DelugApi.delugapi_stop()
-        return reply
 
     def test2_json(self) -> DelugApiResponse:
         print("DelugapiClient test2_json method called")
@@ -267,16 +281,4 @@ class DelugapiClient:
                         dump_file = dumps_dir / f'torrents_dump_{indx}.json'
                         dump_json = json.dumps(torrent_dict, indent=4)
                         dump_file.write_text(dump_json, encoding='utf-8')
-        return response
-
-    def move_torrent(self, torrent_id: str, destination: Path):
-        self.loggor.info(
-            f'DelugapiClient move_torrent method called for torrent_id="{torrent_id}" to destination="{destination}"')
-        from executin.commons import Commons
-        if not Commons.singleton.is_at_daemon:
-            self.loggor.warning("Not at daemon, skipping move")
-            return
-        transaction = DelugApiMoveTransaction(torrent_id=torrent_id, destination=str(destination))
-        response = self.api.transactize(transaction)
-        self.loggor.info(f"response: {response}")
         return response
