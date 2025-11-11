@@ -10,11 +10,12 @@ from delugapi.twistin_adaptors import DelugApiTwistee
 from deluge.ui.client import client as ui_client
 # from twistin import TwistResponse
 
-if TYPE_CHECKING:
-    from delugapi import DelugApi as DelugApiType
-else:
-    DelugApiType = 'DelugApi'
+# if TYPE_CHECKING:
+#     from delugapi import DelugApi as DelugApiType
+# else:
+#     type DelugApiType = 'DelugApi'
 
+from delugapi import DelugApi as DelugApiType
 
 class DelugApiTransactionTwistee(DelugApiTwistee):
     def __init__(self, api: DelugApiType, transaction: DelugApiTransaction) -> None:

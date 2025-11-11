@@ -2,7 +2,7 @@ from typing import Generator, Any
 
 from twisted.internet import defer, reactor  # noqa
 from deluge.ui.client import client as ui_client
-from delugapi.transaction import DelugApiTransaction
+from .transaction import DelugApiTransaction
 
 
 class DelugApi:
