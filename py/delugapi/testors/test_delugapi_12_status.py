@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 from pathlib import Path
 import import_helpor  # noqa NEEDED!!!
-from delugapi.delugapi_client import DelugapiTestClient
+from delugapi.delugapi_test_client import DelugapiTestClient
 from delugapi.response import DelugApiResponse
 from executin.logge import Loggor
 

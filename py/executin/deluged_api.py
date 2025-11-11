@@ -15,7 +15,7 @@ import logging
 import subprocess
 from subprocess import CompletedProcess
 
-from Salaisuudet.secrets import Secretor
+from salaisuudet.secrets import Secretor
 
 
 class DelugeRPCError(Exception):

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 import import_helpor  # noqa NEEDED!!!
-from Salaisuudet.secrets import Secretor
+from salaisuudet.secrets import Secretor
 from executin.logge import Loggor
 
 
