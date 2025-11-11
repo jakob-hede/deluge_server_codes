@@ -1,7 +1,8 @@
 from abc import ABC, abstractmethod
 from typing import Generator, Any
 
-from twisted.internet import defer
+from delugapi.twistin_adaptors import defer_inline_callbacks, defer_return_value
+# from twisted.internet import defer
 
 from deluge.ui.client import client as ui_client
 from delugapi.response import DelugApiResponse
@@ -39,14 +40,14 @@ class DelugApiStatusTransaction(DelugApiTransaction):
         super().__init__()
         self.torrent_id: str = torrent_id
 
-    @defer.inlineCallbacks
+    @defer_inline_callbacks
     def executize(self) -> Generator[Any, Any, dict]:  # noqa
         print(f"executize {self.__class__.__name__}...")
         reply: dict = yield self.fetch_torrents_status()
-        defer.returnValue(reply)
+        defer_return_value(reply)
 
 
-    @defer.inlineCallbacks
+    @defer_inline_callbacks
     def fetch_torrents_status(self,
                               filter_dict: dict = None,
                               keys: list = None) -> Generator[Any, Any, dict]:
@@ -68,15 +69,15 @@ class DelugApiMoveTransaction(DelugApiTransaction):
         self.torrent_id: str = torrent_id
         self.destination: str = destination
 
-    @defer.inlineCallbacks
+    @defer_inline_callbacks
     def executize(self) -> Generator[Any, Any, dict]:  # noqa
         print(f"executize {self.__class__.__name__}...")
         reply: dict = yield self.fetch_move()
-        defer.returnValue(reply)
+        defer_return_value(reply)
 
-    @defer.inlineCallbacks
+    @defer_inline_callbacks
     def fetch_move(self) -> Generator[Any, Any, dict]:
         print("coring...")
         torrent_ids: list[str] = [self.torrent_id]
         reply_dict: dict = yield ui_client.core.move_storage(torrent_ids, self.destination)
-        defer.returnValue(reply_dict)
+        defer_return_value(reply_dict)

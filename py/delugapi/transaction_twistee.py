@@ -1,12 +1,12 @@
 from abc import abstractmethod
 from typing import Generator, Any, TYPE_CHECKING
 
-from twisted.internet import defer
-from twisted.internet.interfaces import IReactorTime
+# from twisted.internet import defer
+# from twisted.internet.interfaces import IReactorTime
 
 from delugapi.response import DelugApiResponse
 from delugapi.transaction import DelugApiTransaction, DelugApiStatusTransaction
-from delugapi.twistin_adaptors import DelugApiTwistee
+from delugapi.twistin_adaptors import DelugApiTwistee, defer_return_value, defer_inline_callbacks, ReactorInterface
 from deluge.ui.client import client as ui_client
 
 # if TYPE_CHECKING:
@@ -23,8 +23,8 @@ class DelugApiTransactionTwistee(DelugApiTwistee):
         self.transaction: DelugApiTransaction = transaction
 
     @abstractmethod
-    @defer.inlineCallbacks
-    def main_twistee_func(self, reactor_clock: IReactorTime) -> Generator[Any, Any, DelugApiResponse]:
+    @defer_inline_callbacks
+    def main_twistee_func(self, reactor_clock: ReactorInterface) -> Generator[Any, Any, DelugApiResponse]:
         ...
 
 
@@ -45,20 +45,20 @@ class DelugApiStatusTransactionTwistee(DelugApiTransactionTwistee):
         super().__init__(api, transaction)
         self.torrent_id: str = torrent_id
 
-    @defer.inlineCallbacks
-    def main_twistee_func(self, reactor_clock: IReactorTime) -> Generator[Any, Any, DelugApiResponse]:
+    @defer_inline_callbacks
+    def main_twistee_func(self, reactor_clock: ReactorInterface) -> Generator[Any, Any, DelugApiResponse]:
         self.loggor.exclaim('main_twistee_func')
         status_dict = yield self.api.transactize(self.transaction)
         response = DelugApiResponse(result=status_dict)
-        defer.returnValue(response)
+        defer_return_value(response)
 
-    @defer.inlineCallbacks
+    @defer_inline_callbacks
     def executize(self) -> Generator[Any, Any, dict]:  # noqa
         print(f"executize {self.__class__.__name__}...")
         reply: dict = yield self.fetch_torrents_status()
-        defer.returnValue(reply)
+        defer_return_value(reply)
 
-    @defer.inlineCallbacks
+    @defer_inline_callbacks
     def fetch_torrents_status(self,
                               filter_dict: dict = None,
                               keys: list = None) -> Generator[Any, Any, dict]:

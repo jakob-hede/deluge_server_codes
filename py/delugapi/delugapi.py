@@ -1,8 +1,10 @@
 from typing import Generator, Any
 
-from twisted.internet import defer, reactor  # noqa
+# from twisted.internet import defer, reactor  # noqa
 from deluge.ui.client import client as ui_client
 from .transaction import DelugApiTransaction
+from .twistin_adaptors import defer_inline_callbacks, defer_return_value, ReactorInterface, adapted_reactor
+
 
 
 class DelugApi:
@@ -23,11 +25,12 @@ class DelugApi:
         txt: str = f"DelugApi {self.host}, {self.port}, {self.user}, {self.password}"
         return txt
 
-    @defer.inlineCallbacks
+    @defer_inline_callbacks
     def transactize(self, transaction: DelugApiTransaction) -> Generator[Any, Any, dict]:
         print(f"Transactizing {transaction}")
 
-        if not reactor.running:  # noqa
+        # if not ReactorInterface.running:  # noqa
+        if not adapted_reactor.running:  # noqa
             raise RuntimeError("Reactor not running, cannot transactize")
 
         reply = {}
@@ -53,19 +56,19 @@ class DelugApi:
         finally:
             if ui_client.connected():
                 ui_client.disconnect()
-            defer.returnValue(reply)
+            defer_return_value(reply)
 
     @classmethod
     def delugapi_wrap(cls, function):
         print(f"wrap {function}")
-        a = reactor.callWhenRunning(function)  # noqa
-        b = reactor.run()  # noqa
+        a = ReactorInterface.callWhenRunning(function)  # noqa
+        b = ReactorInterface.run()  # noqa
         print("Reactor finished")
 
     @classmethod
     def delugapi_stop(cls):
-        print("Stopping reactor...")
-        reactor.stop()  # noqa
+        print("Stopping ReactorType...")
+        ReactorInterface.stop()  # noqa
         print("Reactor stopped")
 
     # @classmethod

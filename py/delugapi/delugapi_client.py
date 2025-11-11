@@ -1,7 +1,7 @@
 from typing import Generator, Any
 from pathlib import Path
 import json
-from twisted.internet import defer  # , reactor  # noqa
+# from twisted.internet import defer  # , reactor  # noqa
 
 from Salaisuudet.secrets import Secretor
 from .delugapi import DelugApi
@@ -11,7 +11,7 @@ from executin.logge import DelugapiClientLoggor
 
 from .torrent import DelugapiTorrent
 from .transaction_twistee import DelugApiStatusTransactionTwistee
-from .twistin_adaptors import DelugApiTwistee, DelugApiTwistor, ReactorType
+from .twistin_adaptors import DelugApiTwistee, DelugApiTwistor, ReactorInterface, defer_inline_callbacks, defer_return_value
 
 
 # from executin.torrentor import Torrentor
@@ -137,8 +137,9 @@ class DelugapiClient:
                 self.transaction: DelugApiTransaction = DelugApiStatusTransaction(torrent_id='')
 
             # @abstractmethod
-            @defer.inlineCallbacks
-            def main_twistee_func(self, reactor_clock: ReactorType) -> Generator[Any, Any, DelugApiResponse]:
+            # @defer.inlineCallbacks
+            @defer_inline_callbacks
+            def main_twistee_func(self, reactor_clock: ReactorInterface) -> Generator[Any, Any, DelugApiResponse]:
                 status_dict = yield api.transactize(self.transaction)
                 response = DelugApiResponse(result=status_dict)
                 sample_id = self.handle_status_reaction_response(response)
@@ -147,7 +148,8 @@ class DelugapiClient:
                 sample_status_dict = transaction_status_dict.get(sample_id, {})
                 name = sample_status_dict.get('name', '')
                 self.loggor.remark(f'Sample Torrent Name for id="{sample_id}": {name}')
-                defer.returnValue(response)
+                # defer.returnValue(response)
+                defer_return_value(response)
 
             def handle_status_reaction_response(self, response):
                 print(f"response: {response}")
@@ -230,7 +232,7 @@ class DelugapiClient:
                     print('...')
                     break
 
-    @defer.inlineCallbacks
+    @defer_inline_callbacks
     def get_status_wrapped(self) -> Generator[Any, Any, dict]:
         print("DelugapiClient test3_status_wrapped method called")
         transaction = DelugApiStatusTransaction()

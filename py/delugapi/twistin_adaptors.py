@@ -1,8 +1,15 @@
 from abc import abstractmethod
 from typing import Generator, Any, TYPE_CHECKING, cast
 
-from twisted.internet import defer
+from twisted.internet import defer, reactor as twisted_reactor
 from twisted.internet.interfaces import IReactorTime
+
+ReactorInterface = IReactorTime
+adapted_reactor: ReactorInterface = twisted_reactor  # type: ignore
+
+#twisteds:
+defer_inline_callbacks = defer.inlineCallbacks
+defer_return_value = defer.returnValue
 
 from twistin import (
     Twistee as _AdaptedTwistee,
@@ -10,8 +17,6 @@ from twistin import (
     Twistor as _AdaptedTwistor,
     TwistinIncompleteException as _AdaptedTwistinIncompleteException,
 )
-
-ReactorType = IReactorTime
 
 
 # if TYPE_CHECKING:
