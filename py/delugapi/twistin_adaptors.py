@@ -26,7 +26,7 @@ class DelugApiResponse(_AdaptedTwistResponse):
 
 
 class IncompleteDelugApiResponse(DelugApiResponse):
-    def __init__(self, message: str = "Incomplete TwistResponse") -> None:
+    def __init__(self, message: str = "Incomplete Response") -> None:
         super().__init__(result=None, error=_AdaptedTwistinIncompleteException(message))
 
 

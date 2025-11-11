@@ -3,8 +3,8 @@ from typing import Generator, Any
 from twisted.internet import defer, task
 from twisted.internet.interfaces import IReactorTime
 
-from twistin.response import TwistResponse
-from twistin.twistee import Twistee
+from ..response import TwistResponse
+from ..twistee import Twistee
 
 
 class TwisteeExample2(Twistee):

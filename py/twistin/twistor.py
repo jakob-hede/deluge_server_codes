@@ -6,9 +6,9 @@ from twisted.internet import reactor as real_reactor
 from twisted.internet.interfaces import IReactorTime
 
 from executin.logge import Loggor
-from twistin.response import TwistResponse, IncompleteTwistResponse
-from twistin.twistee import TwisteeProtocol, DummyTwistee
-from twistin.exceptions import TwistinException, TwistinTestException
+from .response import TwistResponse, IncompleteTwistResponse
+from .twistee import TwisteeProtocol, DummyTwistee
+from .exceptions import TwistinException, TwistinTestException
 
 _DEFAULT_REACTOR: IReactorTime = cast(IReactorTime, cast(object, real_reactor))
 

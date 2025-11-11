@@ -8,7 +8,6 @@ from delugapi.response import DelugApiResponse
 from delugapi.transaction import DelugApiTransaction, DelugApiStatusTransaction
 from delugapi.twistin_adaptors import DelugApiTwistee
 from deluge.ui.client import client as ui_client
-# from twistin import TwistResponse
 
 # if TYPE_CHECKING:
 #     from delugapi import DelugApi as DelugApiType

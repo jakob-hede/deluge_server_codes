@@ -1,4 +1,4 @@
-from twistin.exceptions import TwistinIncompleteException
+from .exceptions import TwistinIncompleteException
 
 
 class TwistResponse:

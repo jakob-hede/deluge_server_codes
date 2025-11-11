@@ -7,7 +7,7 @@ from twisted.internet import defer
 from twisted.internet.interfaces import IReactorTime
 
 from executin.logge import Loggor
-from twistin.response import TwistResponse
+from .response import TwistResponse
 
 
 # TwisteeProtocol shall be a Protocol with method main_twistee_func

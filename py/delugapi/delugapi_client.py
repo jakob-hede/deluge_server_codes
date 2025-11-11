@@ -115,8 +115,6 @@ class DelugapiClient:
     def test5_status(self) -> DelugApiResponse:
         self.loggor.exclaim('DelugapiClient test5_status method called')
         self.reaction_response = DelugApiResponse()
-        # from twistin import Twistee, TwistResponse
-        # from twistin import Twistor
         # from delugapi.transaction_twistee import DelugApiStatusTransactionTwistee
         twistee: DelugApiTwistee = DelugApiStatusTransactionTwistee(self.api)
         # twistor = DelugApiTwistor(twistee)
