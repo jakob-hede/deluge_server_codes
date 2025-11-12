@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
 
 import sys
+from typing import Generator, Any
 import import_helpor  # noqa NEEDED!!!
+from delugapi import DelugapiClient
+from delugapi.transaction_twistee import DelugApiStatusTransactionTwistee
+from delugapi.twistin_adaptors import DelugApiTwistee, defer_inline_callbacks, ReactorInterface, defer_return_value
+from delugapi.response import DelugApiResponse, IncompleteDelugApiResponse
 
 from executin.commons import ExecutorException
 from executin.logge import ExecutorLoggor
@@ -10,7 +15,18 @@ from executin.torrentor import Torrentor
 from delugapi.delugapi import DelugApi
 
 
-class Executor:
+class ExecutorDelugapiClient(DelugapiClient):
+    def test5_status(self) -> DelugApiResponse:
+        self.loggor.exclaim('DelugapiClient test5_status method called')
+        self.reaction_response = DelugApiResponse()
+        twistee: DelugApiTwistee = DelugApiStatusTransactionTwistee(self.api)
+        response = self.twistorize(twistee)
+        self.reaction_response = response
+        self.handle_status_reaction_response()
+        return response
+
+
+class Executor():
     def __init__(self):
         super().__init__()
         self.loggor = ExecutorLoggor()
@@ -19,18 +35,16 @@ class Executor:
         try:
             self.executize()
         except Exception as e:
-            # enfo = f'{e.__class__.__name__}: {e.args}'
-            # self.loggor.error(f'Executor.tryxetize Exception: {enfo}')
-            # from .commons import ExecutorException
             enew = ExecutorException.factory_from_exception(e, 'in Executor.tryxetize')
             self.loggor.error(f'{enew}')
             raise enew
-            # raise ExecutorException(f'Executor.tryxetize Exception: {enfo}')
-            # import traceback
-            # traceback.print_exc()
-            # reactor.stop()  # noqa
 
     def executize(self):
+        self.loggor.exclaim("Executor.executize...")
+        client = ExecutorDelugapiClient()
+        response: DelugApiResponse = client.test5_status()
+
+    def _x_executize(self):
         self.loggor.exclaim("Executor.executize...")
         # self.loggor.info("Executor.executize")
         pop_args = sys.argv.copy()
@@ -100,47 +114,13 @@ class Executor:
 '''
 
 
-# def main_function():
-#     executor = Executor()
-#     executor.executize()
-#     # DelugApi.delugapi_unwrap()
-
 def main_function():
-    executor = Executor()
-    try:
-        executor.tryxetize()
-    except Exception as e:
-        e_str = str(e)
-        executor.loggor.error(f"Error in main_function: {e_str}")
-        # from twisted.internet import reactor  # noqa
-        # reactor.stop()  # Stop reactor after execution completes or fails
-    finally:
-        executor.loggor.info("Executor main_function DONE")
+    print("main_function")
 
 
 def main():
-    # loggor = ExecutorLoggor()
-    # loggor.info("Executor main called")
-    DelugApi.delugapi_wrap(main_function)
-
-
-# def main():
-#     from twisted.internet import reactor
-#
-#     def main_function():
-#         try:
-#             print("main_function")
-#             executor = Executor()
-#             executor.executize()
-#         except Exception as e:
-#             print(f"Error in main_function: {e}")
-#             import traceback
-#             traceback.print_exc()
-#         finally:
-#             reactor.stop()  # Stop reactor after execution completes or fails
-#
-#     print(f'wrap {main_function}')
-#     DelugApi.delugapi_wrap(main_function)
+    executor = Executor()
+    executor.tryxetize()
 
 
 if __name__ == '__main__':
