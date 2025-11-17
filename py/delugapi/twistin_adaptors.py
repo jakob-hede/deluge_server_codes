@@ -1,11 +1,12 @@
 from abc import abstractmethod
 from typing import Generator, Any, TYPE_CHECKING, cast
 
-from twisted.internet import defer, reactor as twisted_reactor
+from twisted.internet import defer, reactor as twisted_reactor, task as twisted_task
 from twisted.internet.interfaces import IReactorTime
 
 ReactorInterface = IReactorTime
 adapted_reactor: ReactorInterface = twisted_reactor  # type: ignore
+adapted_task = twisted_task
 
 #twisteds:
 defer_inline_callbacks = defer.inlineCallbacks

@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Generator, Any
 
-from delugapi.twistin_adaptors import defer_inline_callbacks, defer_return_value
+from delugapi.twistin_adaptors import defer_inline_callbacks, defer_return_value, adapted_task
 # from twisted.internet import defer
 
 from deluge.ui.client import client as ui_client
@@ -21,7 +21,6 @@ class DelugApiTransaction(ABC):
     @abstractmethod
     def executize(self) -> Generator[Any, Any, dict]:
         raise NotImplementedError  # pragma: no cover
-
 
 
 class DelugApiStatusTransaction(DelugApiTransaction):
@@ -45,7 +44,6 @@ class DelugApiStatusTransaction(DelugApiTransaction):
         print(f"executize {self.__class__.__name__}...")
         reply: dict = yield self.fetch_torrents_status()
         defer_return_value(reply)
-
 
     @defer_inline_callbacks
     def fetch_torrents_status(self,
@@ -72,7 +70,9 @@ class DelugApiMoveTransaction(DelugApiTransaction):
     @defer_inline_callbacks
     def executize(self) -> Generator[Any, Any, dict]:  # noqa
         print(f"executize {self.__class__.__name__}...")
-        reply: dict = yield self.fetch_move()
+        # reply: dict = yield self.fetch_move()
+        # reply: dict = yield self.fetch_dummy()
+        reply: dict = yield self.coring_force_recheck()
         defer_return_value(reply)
 
     @defer_inline_callbacks
@@ -80,4 +80,22 @@ class DelugApiMoveTransaction(DelugApiTransaction):
         print("coring...")
         torrent_ids: list[str] = [self.torrent_id]
         reply_dict: dict = yield ui_client.core.move_storage(torrent_ids, self.destination)
+        defer_return_value(reply_dict)
+
+    @defer_inline_callbacks
+    def fetch_dummy(self) -> Generator[Any, Any, dict]:
+        from twisted.internet import reactor
+        print("fetch_dummy...")
+        delay: float = 1
+        callee = lambda: None
+        yield adapted_task.deferLater(reactor, delay, callable=callee)
+        reply_dict: dict = {'status': 'dummy_completed', 'duration': delay}
+        defer_return_value(reply_dict)
+
+    @defer_inline_callbacks
+    def coring_force_recheck(self) -> Generator[Any, Any, dict]:
+        from twisted.internet import reactor
+        print("force_recheck...")
+        torrent_ids: list[str] = [self.torrent_id]
+        reply_dict: dict = yield ui_client.core.force_recheck(torrent_ids)
         defer_return_value(reply_dict)

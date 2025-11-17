@@ -58,11 +58,17 @@ habitize() {
   [[ -z "${log_dir}" ]] && log_dir='/deluge/log'
   [[ -z "${pyxe}" ]] && pyxe='/usr/bin/python'
   [[ -z "${py_dir}" ]] && py_dir='/codes/py'
+  [[ -d "${py_dir}" ]] || {
+    py_dir='/opt/projects/deluge_source_project/deluge_server_codes/py'
+    pyxe='/opt/projects/deluge_source_project/venv/bin/python3'
+  }
 
 #  log_dir='/deluge/log'
   [[ -d "${log_dir}" ]] || {
     log_dir='/mnt/btrfs_data/deluge/log'
-    #     /bin/mkdir -p "${log_dir}"
+  }
+  [[ -d "${log_dir}" ]] || {
+    log_dir='/opt/projects/deluge_source_project/log/exelog'
   }
   [[ -d "${log_dir}" ]] || fail "log_dir no exists: ${log_dir}"
   print "log_dir: ${log_dir}"
