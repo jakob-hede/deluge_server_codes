@@ -151,7 +151,7 @@ class Torrentor:
     # Header: Authorization: MediaBrowser Token="<api_key>"
     def jellyfin_refresh(self, label: str, destination: str) -> None:
         """Trigger a Jellyfin library rescan after moving media."""
-        media_labels = ('tv-in', 'movie-in', 'music-in')
+        media_labels = ( 'movin', 'tv-in', 'tv-arc')
         if label not in media_labels:
             self.logger.debug(f'Skipping Jellyfin refresh for non-media label "{label}"')
             return
