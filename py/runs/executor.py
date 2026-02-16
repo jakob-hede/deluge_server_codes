@@ -90,7 +90,9 @@ class EventExecutwistee(DelugApiTransactionTwistee):
         reply_dict: dict = {'status': 'success', 'duration': 1}
 
         torrentor = Torrentor(self.torrent_id, self.torrent_name, self.base_sdir)
-        torrentor.process_event(self.event_name)
+        d = torrentor.process_event(self.event_name)
+        if d is not None:
+            yield d
         self.loggor.info(f'DONE Executor.executize: "{self.event_name}", "{self.torrent_name}", "{self.base_sdir}"')
 
         response = DelugApiResponse(result=reply_dict)

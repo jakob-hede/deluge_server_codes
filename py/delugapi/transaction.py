@@ -70,9 +70,7 @@ class DelugApiMoveTransaction(DelugApiTransaction):
     @defer_inline_callbacks
     def executize(self) -> Generator[Any, Any, dict]:  # noqa
         print(f"executize {self.__class__.__name__}...")
-        # reply: dict = yield self.fetch_move()
-        # reply: dict = yield self.fetch_dummy()
-        reply: dict = yield self.coring_force_recheck()
+        reply: dict = yield self.fetch_move()
         defer_return_value(reply)
 
     @defer_inline_callbacks

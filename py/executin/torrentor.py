@@ -28,7 +28,7 @@ class Torrentor:
         if event_name == 'exe_added':
             self.on_added()
         elif event_name == 'exe_completed':
-            self.on_completed()
+            return self.on_completed()
         elif event_name == 'exe_removed':
             self.on_removed()
         else:
@@ -137,15 +137,16 @@ class Torrentor:
             self.reaction_response.result = transaction_response.result
             self.reaction_response.error = transaction_response.error
 
-            # reactor.stop()  # noqa
-            DelugApi.delugapi_stop()
+            # Reactor lifecycle is managed by delugapi_wrap / Twistor — do NOT stop here
             return reply
 
         self.reaction_response = DelugApiResponse()
-        DelugApi.delugapi_wrap(reactize)
-        response = self.reaction_response
-
-        print(f"on_completed response: {response}")
+        d = DelugApi.delugapi_wrap(reactize)
+        if d is not None:
+            print(f"on_completed: Deferred pending (reactor already running)")
+        else:
+            print(f"on_completed response: {self.reaction_response}")
+        return d
 
     def on_removed(self):
         self.logger.info(f"Torrent '{self.torrent_name}' has been removed..")

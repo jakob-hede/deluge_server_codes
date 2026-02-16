@@ -61,14 +61,27 @@ class DelugApi:
     @classmethod
     def delugapi_wrap(cls, function):
         print(f"wrap {function}")
-        a = ReactorInterface.callWhenRunning(function)  # noqa
-        b = ReactorInterface.run()  # noqa
-        print("Reactor finished")
+        if adapted_reactor.running:  # noqa
+            # Reactor already running (inside Twistor) — call directly
+            # and return the Deferred for the caller to yield
+            d = function()
+            return d
+        else:
+            # We manage the reactor lifecycle: start it and auto-stop after completion
+            def wrapped():
+                d = function()
+                d.addBoth(lambda _: adapted_reactor.stop())
+                return d
+            adapted_reactor.callWhenRunning(wrapped)  # noqa
+            adapted_reactor.run()  # noqa
+            print("Reactor finished (self-managed)")
+            return None
 
     @classmethod
     def delugapi_stop(cls):
         print("Stopping ReactorType...")
-        ReactorInterface.stop()  # noqa
+        if adapted_reactor.running:  # noqa
+            adapted_reactor.stop()  # noqa
         print("Reactor stopped")
 
     # @classmethod
