@@ -6,7 +6,7 @@ import import_helpor  # noqa NEEDED!!!
 from delugapi import DelugapiClient
 from delugapi.transaction import DelugApiTransaction, DelugApiMoveTransaction
 from delugapi.transaction_twistee import DelugApiStatusTransactionTwistee, DelugApiTransactionTwistee
-from delugapi.twistin_adaptors import DelugApiTwistee, defer_inline_callbacks, ReactorInterface, defer_return_value, \
+from delugapi.twistin_adaptors import DelugApiTwistee, defer_inline_callbacks, ReactorInterface, \
     adapted_task
 from delugapi.response import DelugApiResponse, IncompleteDelugApiResponse
 
@@ -96,7 +96,7 @@ class EventExecutwistee(DelugApiTransactionTwistee):
         self.loggor.info(f'DONE Executor.executize: "{self.event_name}", "{self.torrent_name}", "{self.base_sdir}"')
 
         response = DelugApiResponse(result=reply_dict)
-        defer_return_value(response)
+        return response
 
     def post_process_response(self, response: DelugApiResponse | None = None) -> None:
         # response = response or self.transaction.response

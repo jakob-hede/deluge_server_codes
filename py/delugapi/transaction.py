@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Generator, Any
 
-from delugapi.twistin_adaptors import defer_inline_callbacks, defer_return_value, adapted_task
+from delugapi.twistin_adaptors import defer_inline_callbacks, adapted_task
 # from twisted.internet import defer
 
 from deluge.ui.client import client as ui_client
@@ -43,7 +43,7 @@ class DelugApiStatusTransaction(DelugApiTransaction):
     def executize(self) -> Generator[Any, Any, dict]:  # noqa
         print(f"executize {self.__class__.__name__}...")
         reply: dict = yield self.fetch_torrents_status()
-        defer_return_value(reply)
+        return reply
 
     @defer_inline_callbacks
     def fetch_torrents_status(self,
@@ -71,14 +71,14 @@ class DelugApiMoveTransaction(DelugApiTransaction):
     def executize(self) -> Generator[Any, Any, dict]:  # noqa
         print(f"executize {self.__class__.__name__}...")
         reply: dict = yield self.fetch_move()
-        defer_return_value(reply)
+        return reply
 
     @defer_inline_callbacks
     def fetch_move(self) -> Generator[Any, Any, dict]:
         print("coring...")
         torrent_ids: list[str] = [self.torrent_id]
         reply_dict: dict = yield ui_client.core.move_storage(torrent_ids, self.destination)
-        defer_return_value(reply_dict)
+        return reply_dict
 
     @defer_inline_callbacks
     def fetch_dummy(self) -> Generator[Any, Any, dict]:
@@ -88,7 +88,7 @@ class DelugApiMoveTransaction(DelugApiTransaction):
         callee = lambda: None
         yield adapted_task.deferLater(reactor, delay, callable=callee)
         reply_dict: dict = {'status': 'dummy_completed', 'duration': delay}
-        defer_return_value(reply_dict)
+        return reply_dict
 
     @defer_inline_callbacks
     def coring_force_recheck(self) -> Generator[Any, Any, dict]:
@@ -96,4 +96,4 @@ class DelugApiMoveTransaction(DelugApiTransaction):
         print("force_recheck...")
         torrent_ids: list[str] = [self.torrent_id]
         reply_dict: dict = yield ui_client.core.force_recheck(torrent_ids)
-        defer_return_value(reply_dict)
+        return reply_dict

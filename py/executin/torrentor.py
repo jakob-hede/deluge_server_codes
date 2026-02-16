@@ -77,12 +77,9 @@ class Torrentor:
     def on_completed(self):
         print(f"Torrentor '{self.torrent_name}' has completed downloading..")
         from typing import Generator, Any
-        from twisted.internet import defer  # , reactor  # noqa
+        from twisted.internet import defer
 
         from delugapi import DelugapiClient
-        # from pydelu.delugapi.response import DelugApiResponse
-        # from pydelu.delugapi import DelugApi
-        # from delugapi import DelugApiStatusTransaction, DelugApiMoveTransaction
         from delugapi.transaction import DelugApiStatusTransaction, DelugApiMoveTransaction
         from delugapi.torrent import DelugapiTorrent
 

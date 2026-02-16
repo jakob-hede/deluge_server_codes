@@ -3,7 +3,7 @@ from typing import Generator, Any
 # from twisted.internet import defer, reactor  # noqa
 from deluge.ui.client import client as ui_client
 from .transaction import DelugApiTransaction
-from .twistin_adaptors import defer_inline_callbacks, defer_return_value, ReactorInterface, adapted_reactor
+from .twistin_adaptors import defer_inline_callbacks, adapted_reactor
 
 
 
@@ -29,8 +29,7 @@ class DelugApi:
     def transactize(self, transaction: DelugApiTransaction) -> Generator[Any, Any, dict]:
         print(f"Transactizing {transaction}")
 
-        # if not ReactorInterface.running:  # noqa
-        if not adapted_reactor.running:  # noqa
+        if not adapted_reactor.running:
             raise RuntimeError("Reactor not running, cannot transactize")
 
         reply = {}
@@ -56,12 +55,12 @@ class DelugApi:
         finally:
             if ui_client.connected():
                 ui_client.disconnect()
-            defer_return_value(reply)
+            return reply
 
     @classmethod
     def delugapi_wrap(cls, function):
         print(f"wrap {function}")
-        if adapted_reactor.running:  # noqa
+        if adapted_reactor.running:
             # Reactor already running (inside Twistor) — call directly
             # and return the Deferred for the caller to yield
             d = function()
@@ -72,21 +71,16 @@ class DelugApi:
                 d = function()
                 d.addBoth(lambda _: adapted_reactor.stop())
                 return d
-            adapted_reactor.callWhenRunning(wrapped)  # noqa
-            adapted_reactor.run()  # noqa
+            adapted_reactor.callWhenRunning(wrapped)
+            adapted_reactor.run()
             print("Reactor finished (self-managed)")
             return None
 
     @classmethod
     def delugapi_stop(cls):
         print("Stopping ReactorType...")
-        if adapted_reactor.running:  # noqa
-            adapted_reactor.stop()  # noqa
+        if adapted_reactor.running:
+            adapted_reactor.stop()
         print("Reactor stopped")
 
-    # @classmethod
-    # def delugapi_twistorize(cls, function):
-    #     print(f"delugapi_twistorize {function}")
-    #     a = reactor.callWhenRunning(function)  # noqa
-    #     b = reactor.run()  # noqa
-    #     print("Reactor finished")
+
