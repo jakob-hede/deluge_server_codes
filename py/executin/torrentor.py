@@ -126,6 +126,7 @@ class Torrentor:
                             reply = yield api_client.api.transactize(transaction)
                             transaction_response = transaction.response
                             print(f"transaction_response: {transaction_response}")
+                            self.jellyfin_refresh(label, destination_str)
                         else:
                             self.logger.warning('Not at daemon, skipping move')
                     else:
@@ -144,6 +145,22 @@ class Torrentor:
         else:
             print(f"on_completed response: {self.reaction_response}")
         return d
+
+    # TODO: implement actual Jellyfin API call
+    # POST http://<jellyfin_host>:8096/Library/Refresh
+    # Header: Authorization: MediaBrowser Token="<api_key>"
+    def jellyfin_refresh(self, label: str, destination: str) -> None:
+        """Trigger a Jellyfin library rescan after moving media."""
+        media_labels = ('tv-in', 'movie-in', 'music-in')
+        if label not in media_labels:
+            self.logger.debug(f'Skipping Jellyfin refresh for non-media label "{label}"')
+            return
+        self.logger.info(f'Jellyfin library refresh triggered for "{label}" at "{destination}"')
+        # TODO: replace with actual HTTP call:
+        # from urllib.request import Request, urlopen
+        # req = Request('http://<host>:8096/Library/Refresh', method='POST')
+        # req.add_header('Authorization', 'MediaBrowser Token="<api_key>"')
+        # urlopen(req)
 
     def on_removed(self):
         self.logger.info(f"Torrent '{self.torrent_name}' has been removed..")
