@@ -182,55 +182,55 @@ class Executor:
         executwistee.post_process_response()
         return None
 
-    def _x_executize(self):
-        self.loggor.exclaim("Executor.executize...")
-        # self.loggor.info("Executor.executize")
-        pop_args = sys.argv.copy()
-        pop_args.pop(0)  # Remove script name
-        event_name = ''
-        if len(pop_args) > 0:
-            event_name = pop_args.pop(0)
-        else:
-            self.loggor.error(f'Executor.executize NO arguments provided. {len(pop_args)}')
-            DelugApi.delugapi_stop()
-            return None
-        if 'status' in event_name:
-            self.statusize(event_name)
-            # self.loggor.warning(f'Executor.executize Faking status')
-
-            # from delugapi.transaction import DelugApiStatusTransaction
-            # x = DelugApiStatusTransaction
-
-            # DelugApi.delugapi_stop()
-            return None
-        if len(pop_args) < 3:
-            # print('Too few arguments provided.')
-            self.loggor.error(f'Executor.executize Too few arguments provided. {len(pop_args)}')
-            # from twisted.internet import defer, reactor  # noqa
-            # reactor.stop()  # noqa
-            DelugApi.delugapi_stop()
-            return None
-            # sys.exit(1)
-        # for indx, arg in enumerate(pop_args):
-        #     print(f" - {indx}: '{arg}'")
-
-        # self.loggor.info(f"Executor.executize: {', '.join(pop_args)}")
-
-        torrent_id = pop_args.pop(0)
-        torrent_name = pop_args.pop(0)
-        base_sdir = pop_args.pop(0)
-
-        self.loggor.info(f'Executor.executize: "{event_name}", "{torrent_name}", "{base_sdir}"')
-
-        # print(f"Event: '{event_name}'")
-        # print(f"Torrent ID: '{torrent_id}'")
-        # print(f"Torrent Name: '{torrent_name}'")
-        # print(f"Base Save Dir: '{base_sdir}'")
-
-        torrentor = Torrentor(torrent_id, torrent_name, base_sdir)
-        torrentor.process_event(event_name)
-        self.loggor.info(f'DONE Executor.executize: "{event_name}", "{torrent_name}", "{base_sdir}"')
-        return None
+    # def _x_executize(self):
+    #     self.loggor.exclaim("Executor.executize...")
+    #     # self.loggor.info("Executor.executize")
+    #     pop_args = sys.argv.copy()
+    #     pop_args.pop(0)  # Remove script name
+    #     event_name = ''
+    #     if len(pop_args) > 0:
+    #         event_name = pop_args.pop(0)
+    #     else:
+    #         self.loggor.error(f'Executor.executize NO arguments provided. {len(pop_args)}')
+    #         DelugApi.delugapi_stop()
+    #         return None
+    #     if 'status' in event_name:
+    #         self.statusize(event_name)
+    #         # self.loggor.warning(f'Executor.executize Faking status')
+    #
+    #         # from delugapi.transaction import DelugApiStatusTransaction
+    #         # x = DelugApiStatusTransaction
+    #
+    #         # DelugApi.delugapi_stop()
+    #         return None
+    #     if len(pop_args) < 3:
+    #         # print('Too few arguments provided.')
+    #         self.loggor.error(f'Executor.executize Too few arguments provided. {len(pop_args)}')
+    #         # from twisted.internet import defer, reactor  # noqa
+    #         # reactor.stop()  # noqa
+    #         DelugApi.delugapi_stop()
+    #         return None
+    #         # sys.exit(1)
+    #     # for indx, arg in enumerate(pop_args):
+    #     #     print(f" - {indx}: '{arg}'")
+    #
+    #     # self.loggor.info(f"Executor.executize: {', '.join(pop_args)}")
+    #
+    #     torrent_id = pop_args.pop(0)
+    #     torrent_name = pop_args.pop(0)
+    #     base_sdir = pop_args.pop(0)
+    #
+    #     self.loggor.info(f'Executor.executize: "{event_name}", "{torrent_name}", "{base_sdir}"')
+    #
+    #     # print(f"Event: '{event_name}'")
+    #     # print(f"Torrent ID: '{torrent_id}'")
+    #     # print(f"Torrent Name: '{torrent_name}'")
+    #     # print(f"Base Save Dir: '{base_sdir}'")
+    #
+    #     torrentor = Torrentor(torrent_id, torrent_name, base_sdir)
+    #     torrentor.process_event(event_name)
+    #     self.loggor.info(f'DONE Executor.executize: "{event_name}", "{torrent_name}", "{base_sdir}"')
+    #     return None
 
     def test_basic(self):
         self.loggor.info("Executor.test_basic called")

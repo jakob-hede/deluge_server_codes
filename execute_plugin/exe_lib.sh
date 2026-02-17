@@ -88,9 +88,9 @@ habitize() {
 }
 
 exe_sub() ( # Start a subshell
-  declare timestamp log_dir log_file pyxe py_file  # pystdout
+  declare timestamp log_dir log_file pyxe py_dir   # pystdout
   habitize
-  declare funcname funcname_pad msg
+  declare funcname funcname_pad msg py_file
   funcname="$1"
   shift
 
