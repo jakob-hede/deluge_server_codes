@@ -16,26 +16,25 @@ class DelugApiTransactionReplyWrapper:
         reply = cls(data)
         return reply
 
-    def __init__(self, data: dict):
+    def __init__(self, data: dict | None) -> None:
         super().__init__()
         self._data = data
-        _hash, _dict = next(iter(data.items()), None)
         self._essence = {}
-
-        if _dict:
-            essence_keys: list[str] = '''
-            name
-            download_location
-            save_path
-            move_completed_path
-            label
-            '''.strip().split()
-            # hash
-            # files
-            # orig_files
-
-            for key in essence_keys:
-                self._essence[key] = _dict.get(key, 'unfound')
+        if data:
+            _hash, _dict = next(iter(data.items()), None)
+            if _dict:
+                essence_keys: list[str] = '''
+                name
+                download_location
+                save_path
+                move_completed_path
+                label
+                '''.strip().split()
+                # hash
+                # files
+                # orig_files
+                for key in essence_keys:
+                    self._essence[key] = _dict.get(key, 'unfound')
 
     @property
     def pressence(self) -> str:
