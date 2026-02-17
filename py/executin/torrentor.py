@@ -142,7 +142,7 @@ class Torrentor:
             print(f' - delugapi_torrent: {delugapi_torrent}')
 
             reply_wrapper = DelugApiTransactionReplyWrapper(reply)
-            print(reply_wrapper.pressence)
+            self.logger.remark(reply_wrapper.pressence)
 
             label = delugapi_torrent.label
             if label:
@@ -181,7 +181,7 @@ class Torrentor:
                         self.logger.warning('Destination is the same as current move_completed_path, skipping move')
                     if label_handler.is_jellyable:
                         self.logger.exclaim(f'jellyfin_refresh')
-                        sleep(5)  # wait for file move to complete and be recognized by Jellyfin
+                        sleep(5)  # wait for file move to complete
                         # self.logger.info(f'label            "{label}"')
                         # self.logger.info(f'destination_sdir "{destination_sdir}"')
 
@@ -195,7 +195,7 @@ class Torrentor:
 
                         # from delugapi.transaction import DelugApiTransactionReplyWrapper
                         reply_wrapper = DelugApiTransactionReplyWrapper(reply)
-                        print(reply_wrapper.pressence)
+                        self.logger.remark(reply_wrapper.pressence)
 
                         if Commons.singleton.is_at_daemon:
                             self.logger.info(f'jellyfin_refresh At daemon!')
@@ -222,26 +222,26 @@ class Torrentor:
             print(f"on_completed response: {self.reaction_response}")
         return d
 
-    def jellyfin_refresh(self):
-        self.logger.exclaim(f'jellyfin_refresh')
-        # self.logger.info(f'label            "{label}"')
-        # self.logger.info(f'destination_sdir "{destination_sdir}"')
-
-        transaction = DelugApiStatusTransaction(torrent_id=self.torrent_id)
-        reply = yield Commons.singleton.api_client.api.transactize(transaction)
-        transaction_response = transaction.response
-        print(f"transaction_response: {transaction_response}")
-        torrent_status_dict: dict = transaction_response.result
-        delugapi_torrent = DelugapiTorrent.from_dict(torrent_status_dict)
-        print(f' - delugapi_torrent: {delugapi_torrent}')
-
-        from delugapi.transaction import DelugApiTransactionReplyWrapper
-        reply_wrapper = DelugApiTransactionReplyWrapper(reply)
-        print(reply_wrapper.pressence)
-
-        if Commons.singleton.is_at_daemon:
-            self.logger.info(f'jellyfin_refresh At daemon!')
-        print()
+    # def jellyfin_refresh(self):
+    #     self.logger.exclaim(f'jellyfin_refresh')
+    #     # self.logger.info(f'label            "{label}"')
+    #     # self.logger.info(f'destination_sdir "{destination_sdir}"')
+    #
+    #     transaction = DelugApiStatusTransaction(torrent_id=self.torrent_id)
+    #     reply = yield Commons.singleton.api_client.api.transactize(transaction)
+    #     transaction_response = transaction.response
+    #     print(f"transaction_response: {transaction_response}")
+    #     torrent_status_dict: dict = transaction_response.result
+    #     delugapi_torrent = DelugapiTorrent.from_dict(torrent_status_dict)
+    #     print(f' - delugapi_torrent: {delugapi_torrent}')
+    #
+    #     from delugapi.transaction import DelugApiTransactionReplyWrapper
+    #     reply_wrapper = DelugApiTransactionReplyWrapper(reply)
+    #     print(reply_wrapper.pressence)
+    #
+    #     if Commons.singleton.is_at_daemon:
+    #         self.logger.info(f'jellyfin_refresh At daemon!')
+    #     print()
 
     # # TODO: implement actual Jellyfin API call
     # # POST http://<jellyfin_host>:8096/Library/Refresh
