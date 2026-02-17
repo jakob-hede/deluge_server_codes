@@ -175,13 +175,32 @@ class Torrentor:
                             transaction_response = transaction.response
                             print(f"transaction_response: {transaction_response}")
                             # self.jellyfin_refresh(label, destination_str)
+                            if transaction_response.error:
+                                self.logger.error(f"Error moving torrent: {transaction_response.error}")
+                            elif transaction_response.is_valid:
+                                self.logger.remark(f"Successfully moving {delugapi_torrent.name} to '{destination_sdir}'")
+                                top =99
+                                for i in range(1, top):
+                                    self.logger.info(f"Waiting for move to complete... ({i + 1}/{top})")
+                                    sleep(1)
+                                    # Check if move is complete by verifying the torrent's current download location
+                                    transaction = DelugApiStatusTransaction(torrent_id=self.torrent_id)
+                                    reply = yield api_client.api.transactize(transaction)
+                                    transaction_response = transaction.response
+                                    torrent_status_dict: dict = transaction_response.result
+                                    updated_torrent = DelugapiTorrent.from_dict(torrent_status_dict)
+                                    current_sdir = updated_torrent.download_location
+                                    self.logger.info(f"Current download location: '{current_sdir}'")
+                                    if current_sdir == destination_sdir:
+                                        self.logger.info("Move completed successfully!")
+                                        break
                         else:
                             self.logger.warning('Not at daemon, skipping move')
                     else:
                         self.logger.warning('Destination is the same as current move_completed_path, skipping move')
                     if label_handler.is_jellyable:
                         self.logger.exclaim(f'jellyfin_refresh')
-                        sleep(5)  # wait for file move to complete
+                        # sleep(5)  # wait for file move to complete
                         # self.logger.info(f'label            "{label}"')
                         # self.logger.info(f'destination_sdir "{destination_sdir}"')
 
