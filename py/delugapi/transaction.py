@@ -41,11 +41,12 @@ class DelugApiTransactionReplyWrapper:
         if not self._essence:
             return 'unpopulated'
         txt = (
-            f'name: {self._essence["name"]}\n'
-            f'download_location: {self._essence["download_location"]}\n'
-            f'save_path: {self._essence["save_path"]}\n'
-            f'move_completed_path: {self._essence["move_completed_path"]}\n'
-            f'label: {self._essence["label"]}\n'
+            f'\npressence:\n'
+            f' - name: {self._essence["name"]}\n'
+            f' - download_location:   {self._essence["download_location"]}\n'
+            f' - save_path:           {self._essence["save_path"]}\n'
+            f' - move_completed_path: {self._essence["move_completed_path"]}\n'
+            f' - label: {self._essence["label"]}\n'
         )
         return txt
 

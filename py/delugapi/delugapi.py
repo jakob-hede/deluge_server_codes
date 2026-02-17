@@ -1,5 +1,7 @@
 from typing import Generator, Any
 
+from twisted.internet.defer import Deferred
+
 # from twisted.internet import defer, reactor  # noqa
 from deluge.ui.client import client as ui_client
 from .transaction import DelugApiTransaction
@@ -58,7 +60,7 @@ class DelugApi:
             return reply
 
     @classmethod
-    def delugapi_wrap(cls, function):
+    def delugapi_wrap(cls, function) -> Deferred | None:
         print(f"wrap {function}")
         if adapted_reactor.running:
             # Reactor already running (inside Twistor) — call directly
