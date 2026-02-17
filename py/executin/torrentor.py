@@ -1,7 +1,7 @@
 from pathlib import Path
+from time import sleep
 
 import yaml
-from autobahn.twisted import sleep
 from twisted.internet.defer import Deferred
 
 from .commons import Commons
