@@ -11,6 +11,13 @@ from .torrentparsor import TorrentParsor
 from delugapi.response import DelugApiResponse
 from delugapi import DelugApi
 
+from typing import Generator, Any
+from twisted.internet import defer
+
+from delugapi import DelugapiClient
+from delugapi.transaction import DelugApiStatusTransaction, DelugApiMoveTransaction
+from delugapi.torrent import DelugapiTorrent
+
 
 class Torrentor:
     torrents_dir: Path = Commons.singleton.deluge_root_dir / 'torrents'
@@ -75,14 +82,32 @@ class Torrentor:
         survey_data['torrent_data'] = torrent_data
         self.survey_file_write_data(survey_data)
 
+    def fetch_delugapi_torrent(self) -> Generator[Any, Any, dict]:
+        print('fetch_delugapi_torrent')
+
+        # api_client: DelugapiClient = Commons.singleton.api_client
+
+        @defer.inlineCallbacks
+        def fetch():
+            transaction = DelugApiStatusTransaction(torrent_id=self.torrent_id)
+            reply = yield Commons.singleton.api_client.api.transactize(transaction)
+            return reply
+
+        transaction_response = fetch().response
+        print(f"transaction_response: {transaction_response}")
+        torrent_status_dict: dict = transaction_response.result
+        delugapi_torrent = DelugapiTorrent.from_dict(torrent_status_dict)
+        print(f' - delugapi_torrent: {delugapi_torrent}')
+        return delugapi_torrent
+
     def on_completed(self) -> Deferred:  # Generator[Any, Any, dict]
         print(f"Torrentor '{self.torrent_name}' has completed downloading..")
-        from typing import Generator, Any
-        from twisted.internet import defer
-
-        from delugapi import DelugapiClient
-        from delugapi.transaction import DelugApiStatusTransaction, DelugApiMoveTransaction
-        from delugapi.torrent import DelugapiTorrent
+        # from typing import Generator, Any
+        # from twisted.internet import defer
+        #
+        # from delugapi import DelugapiClient
+        # from delugapi.transaction import DelugApiStatusTransaction, DelugApiMoveTransaction
+        # from delugapi.torrent import DelugapiTorrent
 
         api_client: DelugapiClient = Commons.singleton.api_client
 
@@ -93,11 +118,10 @@ class Torrentor:
             reply = yield api_client.api.transactize(transaction)
             transaction_response = transaction.response
             print(f"transaction_response: {transaction_response}")
-
             torrent_status_dict: dict = transaction_response.result
-
             delugapi_torrent = DelugapiTorrent.from_dict(torrent_status_dict)
             print(f' - delugapi_torrent: {delugapi_torrent}')
+
             label = delugapi_torrent.label
             if label:
                 print(f' - label: "{label}"')
@@ -142,7 +166,6 @@ class Torrentor:
                             from delugapi.transaction import DelugApiTransactionReplyWrapper
                             reply_wrapper = DelugApiTransactionReplyWrapper(reply)
                             print(reply_wrapper.pressence)
-
 
                             if Commons.singleton.is_at_daemon:
                                 self.logger.info(f'jellyfin_refresh At daemon!')
