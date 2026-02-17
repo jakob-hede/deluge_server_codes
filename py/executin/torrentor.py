@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import yaml
+from autobahn.twisted import sleep
 from twisted.internet.defer import Deferred
 
 from .commons import Commons
@@ -180,6 +181,7 @@ class Torrentor:
                         self.logger.warning('Destination is the same as current move_completed_path, skipping move')
                     if label_handler.is_jellyable:
                         self.logger.exclaim(f'jellyfin_refresh')
+                        sleep(5)  # wait for file move to complete and be recognized by Jellyfin
                         # self.logger.info(f'label            "{label}"')
                         # self.logger.info(f'destination_sdir "{destination_sdir}"')
 
