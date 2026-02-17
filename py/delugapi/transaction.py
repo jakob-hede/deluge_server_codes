@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from typing import Generator, Any
 
@@ -6,6 +8,51 @@ from delugapi.twistin_adaptors import defer_inline_callbacks, adapted_task
 
 from deluge.ui.client import client as ui_client
 from delugapi.response import DelugApiResponse
+
+
+class DelugApiTransactionReplyWrapper:
+    @classmethod
+    def from_dict(cls, data: dict) -> DelugApiTransactionReplyWrapper:
+        reply = cls(data)
+        return reply
+
+    def __init__(self, data: dict):
+        super().__init__()
+        self._data = data
+        _hash, _dict = next(iter(data.items()), None)
+        self._essence = {}
+
+        if _dict:
+            essence_keys: list[str] = '''
+            name
+            download_location
+            save_path
+            move_completed_path
+            label
+            '''.strip().split()
+            # hash
+            # files
+            # orig_files
+
+            for key in essence_keys:
+                self._essence[key] = _dict.get(key, 'unfound')
+
+    @property
+    def pressence(self) -> str:
+        if not self._essence:
+            return 'unpopulated'
+        txt = (
+            f'name: {self._essence["name"]}\n'
+            f'download_location: {self._essence["download_location"]}\n'
+            f'save_path: {self._essence["save_path"]}\n'
+            f'move_completed_path: {self._essence["move_completed_path"]}\n'
+            f'label: {self._essence["label"]}\n'
+        )
+        return txt
+
+    @property
+    def data(self) -> dict:
+        return self._data
 
 
 class DelugApiTransaction(ABC):

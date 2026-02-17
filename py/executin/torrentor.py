@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import yaml
+from twisted.internet.defer import Deferred
 
 from .commons import Commons
 from .logge import DelugapiTorrentorLoggor
@@ -74,7 +75,7 @@ class Torrentor:
         survey_data['torrent_data'] = torrent_data
         self.survey_file_write_data(survey_data)
 
-    def on_completed(self):
+    def on_completed(self) -> Deferred:  # Generator[Any, Any, dict]
         print(f"Torrentor '{self.torrent_name}' has completed downloading..")
         from typing import Generator, Any
         from twisted.internet import defer
@@ -110,27 +111,45 @@ class Torrentor:
                     torrent_id = delugapi_torrent.tid
                     destination_dir = label_handler.destin_dir
                     origin_dir = delugapi_torrent.download_location
-                    destination_str = str(destination_dir)
-                    origin_str = str(origin_dir)
-                    print(f'origin: "{origin_str}"')
+                    destination_sdir = str(destination_dir)
+                    origin_sdir = str(origin_dir)
+                    print(f'origin: "{origin_sdir}"')
+                    current_sdir = origin_sdir
                     self.logger.info(
-                        f'Handling labelled torrent: "{label}" "{delugapi_torrent.title}" to "{destination_str}"')
+                        f'Handling labelled torrent: "{label}" "{delugapi_torrent.title}" to "{destination_sdir}"')
 
-                    if destination_str != delugapi_torrent.download_location:
+                    if destination_sdir != delugapi_torrent.download_location:
                         if Commons.singleton.is_at_daemon:
-                            self.logger.info(f'At daemon, moving torrent from "{origin_str}" ...')
+                            self.logger.info(f'At daemon, moving torrent from "{origin_sdir}" ...')
                             if not destination_dir.is_dir():
                                 destination_dir.mkdir(parents=True, exist_ok=True)
                             transaction = DelugApiMoveTransaction(torrent_id=torrent_id,
-                                                                  destination=str(destination_str))
+                                                                  destination=str(destination_sdir))
                             reply = yield api_client.api.transactize(transaction)
                             transaction_response = transaction.response
                             print(f"transaction_response: {transaction_response}")
-                            self.jellyfin_refresh(label, destination_str)
+                            # self.jellyfin_refresh(label, destination_str)
                         else:
                             self.logger.warning('Not at daemon, skipping move')
                     else:
                         self.logger.warning('Destination is the same as current move_completed_path, skipping move')
+                    if label_handler.is_jellyable:
+                        def jellyfin_refresh():
+                            self.logger.exclaim(f'jellyfin_refresh')
+                            self.logger.info(f'label            "{label}"')
+                            self.logger.info(f'destination_sdir "{destination_sdir}"')
+
+                            from delugapi.transaction import DelugApiTransactionReplyWrapper
+                            reply_wrapper = DelugApiTransactionReplyWrapper(reply)
+                            print(reply_wrapper.pressence)
+
+
+                            if Commons.singleton.is_at_daemon:
+                                self.logger.info(f'jellyfin_refresh At daemon!')
+                            print()
+
+                        jellyfin_refresh()
+                        # self.jellyfin_refresh(label, destination_str)
 
             self.reaction_response.result = transaction_response.result
             self.reaction_response.error = transaction_response.error
@@ -146,21 +165,21 @@ class Torrentor:
             print(f"on_completed response: {self.reaction_response}")
         return d
 
-    # TODO: implement actual Jellyfin API call
-    # POST http://<jellyfin_host>:8096/Library/Refresh
-    # Header: Authorization: MediaBrowser Token="<api_key>"
-    def jellyfin_refresh(self, label: str, destination: str) -> None:
-        """Trigger a Jellyfin library rescan after moving media."""
-        media_labels = ( 'movin', 'tv-in', 'tv-arc')
-        if label not in media_labels:
-            self.logger.debug(f'Skipping Jellyfin refresh for non-media label "{label}"')
-            return
-        self.logger.info(f'Jellyfin library refresh triggered for "{label}" at "{destination}"')
-        # TODO: replace with actual HTTP call:
-        # from urllib.request import Request, urlopen
-        # req = Request('http://<host>:8096/Library/Refresh', method='POST')
-        # req.add_header('Authorization', 'MediaBrowser Token="<api_key>"')
-        # urlopen(req)
+    # # TODO: implement actual Jellyfin API call
+    # # POST http://<jellyfin_host>:8096/Library/Refresh
+    # # Header: Authorization: MediaBrowser Token="<api_key>"
+    # def jellyfin_refresh(self, label: str, destination: str) -> None:
+    #     """Trigger a Jellyfin library rescan after moving media."""
+    #     media_labels = ('movin', 'tv-in', 'tv-arc')
+    #     if label not in media_labels:
+    #         self.logger.debug(f'Skipping Jellyfin refresh for non-media label "{label}"')
+    #         return
+    #     self.logger.info(f'Jellyfin library refresh triggered for "{label}" at "{destination}"')
+    #     # TODO: replace with actual HTTP call:
+    #     # from urllib.request import Request, urlopen
+    #     # req = Request('http://<host>:8096/Library/Refresh', method='POST')
+    #     # req.add_header('Authorization', 'MediaBrowser Token="<api_key>"')
+    #     # urlopen(req)
 
     def on_removed(self):
         self.logger.info(f"Torrent '{self.torrent_name}' has been removed..")
