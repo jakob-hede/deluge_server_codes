@@ -33,7 +33,7 @@ class JellyfinCommunicator:
             "replaceAllImages": "false",
         })
         self.logger.info(f"Jellyfin library '{library_name}' refresh triggered successfully")
-        # self.notify_clients_refresh()
+        self.notify_clients_refresh()
 
     def notify_clients_refresh(self):
         """Send a RefreshLibrary command to all active Jellyfin sessions."""
@@ -47,6 +47,8 @@ class JellyfinCommunicator:
                     "Name": "RefreshLibrary",
                 })
                 notified += 1
+                self.logger.remark(f"Notified session '{session_id}' to refresh library")
+                self.logger.debug(f"info: {session}")
             except requests.HTTPError:
                 self.logger.debug(f"Could not notify session '{session_id}', skipping")
         self.logger.info(f"Notified {notified}/{len(sessions)} client sessions to refresh")
