@@ -68,6 +68,8 @@ class TorrentLabelHandlor(TorrentHandlor):
     label = 'super'
     _destin_dir: Path = Path('/ocean/video/misplaced')
     _is_jellyable: bool = False
+    jelly_wrong_library_name: str = 'wrong-name'
+    jelly_library_name: str = jelly_wrong_library_name
 
     @classmethod
     def factory(cls, label: str, **kwargs) -> TorrentLabelHandlor | None:
@@ -95,6 +97,7 @@ class TorrentHandlorMovin(TorrentLabelHandlor):
     label = 'movin'
     _destin_dir: Path = Path('/ocean/video/movies/movin')
     _is_jellyable: bool = True
+    jelly_library_name = 'movin'
 
     @property
     def destin_dir(self) -> Path:
@@ -115,6 +118,7 @@ class TorrentHandlorTvin(TorrentLabelHandlor):
     label = 'tv-in'
     _destin_dir: Path = Path('/ocean/video/tv/_tvin')
     _is_jellyable: bool = True
+    jelly_library_name = 'TV'
 
     @property
     def destin_dir(self) -> Path:
@@ -139,6 +143,7 @@ class TorrentHandlorTvarc(TorrentLabelHandlor):
     label = 'tv-arc'
     _destin_dir: Path = Path('/ocean/video/tv/_tvarc')
     _is_jellyable: bool = True
+    jelly_library_name = 'TV'
 
     @property
     def destin_dir(self) -> Path:

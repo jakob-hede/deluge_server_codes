@@ -8,51 +8,7 @@ from delugapi.twistin_adaptors import defer_inline_callbacks, adapted_task
 
 from deluge.ui.client import client as ui_client
 from delugapi.response import DelugApiResponse
-
-
-class DelugApiTransactionReplyWrapper:
-    @classmethod
-    def from_dict(cls, data: dict) -> DelugApiTransactionReplyWrapper:
-        reply = cls(data)
-        return reply
-
-    def __init__(self, data: dict | None) -> None:
-        super().__init__()
-        self._data = data
-        self._essence = {}
-        if data:
-            _hash, _dict = next(iter(data.items()), None)
-            if _dict:
-                essence_keys: list[str] = '''
-                name
-                download_location
-                save_path
-                move_completed_path
-                label
-                '''.strip().split()
-                # hash
-                # files
-                # orig_files
-                for key in essence_keys:
-                    self._essence[key] = _dict.get(key, 'unfound')
-
-    @property
-    def pressence(self) -> str:
-        if not self._essence:
-            return 'unpopulated'
-        txt = (
-            f'\npressence:\n'
-            f' - name: {self._essence["name"]}\n'
-            f' - download_location:   {self._essence["download_location"]}\n'
-            f' - save_path:           {self._essence["save_path"]}\n'
-            f' - move_completed_path: {self._essence["move_completed_path"]}\n'
-            f' - label: {self._essence["label"]}\n'
-        )
-        return txt
-
-    @property
-    def data(self) -> dict:
-        return self._data
+from delugapi.torrent import DelugapiTorrent
 
 
 class DelugApiTransaction(ABC):
@@ -71,13 +27,16 @@ class DelugApiTransaction(ABC):
 
 
 class DelugApiStatusTransaction(DelugApiTransaction):
-    interesting_keys: list[str] = '''
+    essence_keys: list[str] = '''
     name
-    label
-    hash
-    move_completed_path
-    save_path
     download_location
+    save_path
+    move_completed_path
+    label
+    '''.strip().split()
+
+    interesting_keys: list[str] = essence_keys + '''
+    hash
     files
     orig_files
     '''.strip().split()
@@ -106,6 +65,50 @@ class DelugApiStatusTransaction(DelugApiTransaction):
         reply_dict: dict = yield ui_client.core.get_torrents_status(filter_dict, keys)
         print(f'return reply_dict: {str(reply_dict)[:100]}...')
         return reply_dict
+
+    @property
+    def essence(self) -> dict | None:
+        _essence = {}
+        data = self.response.result
+        if data:
+            _hash, _dict = next(iter(data.items()), None)
+            if _dict:
+                essence_keys: list[str] = '''
+                name
+                download_location
+                save_path
+                move_completed_path
+                label
+                '''.strip().split()
+                # hash
+                # files
+                # orig_files
+                for key in essence_keys:
+                    _essence[key] = _dict.get(key, 'unfound')
+        return _essence
+
+    @property
+    def pressence(self) -> str:
+        _essence = self.essence
+        if not _essence:
+            return 'unpopulated'
+        txt = (
+            f'\npressence:\n'
+            f' - name: {_essence["name"]}\n'
+            f' - download_location:   {_essence["download_location"]}\n'
+            f' - save_path:           {_essence["save_path"]}\n'
+            f' - move_completed_path: {_essence["move_completed_path"]}\n'
+            f' - label: {_essence["label"]}\n'
+        )
+        return txt
+
+    def delugapi_torrent_from_status(self) -> DelugapiTorrent | None:
+        from delugapi.torrent import DelugapiTorrent
+        data = self.response.result
+        if isinstance(data, dict) and data:
+            torrent = DelugapiTorrent.from_dict(data)
+            return torrent
+        return None
 
 
 class DelugApiMoveTransaction(DelugApiTransaction):

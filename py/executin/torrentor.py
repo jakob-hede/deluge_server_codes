@@ -5,6 +5,7 @@ import yaml
 from twisted.internet.defer import Deferred
 
 from .commons import Commons
+from .jellyfin_communicator import JellyfinCommunicator
 from .logge import DelugapiTorrentorLoggor
 from .torrenthandlor import TorrentLabelHandlor
 from .torrentparsor import TorrentParsor
@@ -16,8 +17,9 @@ from typing import Generator, Any
 from twisted.internet import defer
 
 from delugapi import DelugapiClient
-from delugapi.transaction import DelugApiStatusTransaction, DelugApiMoveTransaction, DelugApiTransactionReplyWrapper
-from delugapi.torrent import DelugapiTorrent
+from delugapi.transaction import DelugApiStatusTransaction, DelugApiMoveTransaction
+
+type deferred_response = Generator[Any, Any, dict | None]
 
 
 class Torrentor:
@@ -131,18 +133,17 @@ class Torrentor:
         api_client: DelugapiClient = Commons.singleton.api_client
 
         @defer.inlineCallbacks
-        def reactize() -> Generator[Any, Any, dict]:
+        def reactize() -> deferred_response:
             print('reactize')
             transaction = DelugApiStatusTransaction(torrent_id=self.torrent_id)
             reply = yield api_client.api.transactize(transaction)
-            transaction_response = transaction.response
-            print(f"transaction_response: {transaction_response}")
-            torrent_status_dict: dict = transaction_response.result
-            delugapi_torrent = DelugapiTorrent.from_dict(torrent_status_dict)
+            # transaction_response = transaction.response
+            # print(f"transaction_response: {transaction_response}")
+            # torrent_status_dict: dict = transaction_response.result
+            # delugapi_torrent = DelugapiTorrent.from_dict(torrent_status_dict)
+            delugapi_torrent = transaction.delugapi_torrent_from_status()
             print(f' - delugapi_torrent: {delugapi_torrent}')
-
-            reply_wrapper = DelugApiTransactionReplyWrapper(reply)
-            self.logger.remark(reply_wrapper.pressence)
+            self.logger.remark(transaction.pressence)
 
             label = delugapi_torrent.label
             if label:
@@ -180,15 +181,16 @@ class Torrentor:
                             # elif transaction_response.is_valid:
                             self.logger.remark(f"Dispatched moving {delugapi_torrent.name} to '{destination_sdir}'")
                             sleep(0.1)
-                            top =99
+                            top = 99
                             for i in range(1, top):
                                 self.logger.info(f"Waiting for move to complete... ({i}/{top})")
                                 # Check if move is complete by verifying the torrent's current download location
                                 transaction = DelugApiStatusTransaction(torrent_id=self.torrent_id)
                                 reply = yield api_client.api.transactize(transaction)
-                                transaction_response = transaction.response
-                                torrent_status_dict: dict = transaction_response.result
-                                updated_torrent = DelugapiTorrent.from_dict(torrent_status_dict)
+                                updated_torrent = transaction.delugapi_torrent_from_status()
+                                # transaction_response = transaction.response
+                                # torrent_status_dict: dict = transaction_response.result
+                                # updated_torrent = DelugapiTorrent.from_dict(torrent_status_dict)
                                 current_sdir = updated_torrent.download_location
                                 self.logger.info(f"Current download location: '{current_sdir}'")
                                 if current_sdir == destination_sdir:
@@ -201,6 +203,27 @@ class Torrentor:
                         self.logger.warning('Destination is the same as current move_completed_path, skipping move')
                     if label_handler.is_jellyable:
                         self.logger.exclaim(f'jellyfin_refresh: {destination_sdir}')
+
+                        transaction = DelugApiStatusTransaction(torrent_id=self.torrent_id)
+                        reply = yield api_client.api.transactize(transaction)
+                        updated_torrent = transaction.delugapi_torrent_from_status()
+                        # transaction_response = transaction.response
+                        # torrent_status_dict: dict = transaction_response.result
+                        # updated_torrent = DelugapiTorrent.from_dict(torrent_status_dict)
+                        current_sdir = updated_torrent.download_location
+                        self.logger.info(f"Current download location: '{current_sdir}'")
+                        if current_sdir == destination_sdir:
+                            self.logger.info(
+                                f'Media is in expected location for Jellyfin refresh: "{destination_sdir}"')
+                            dev_mode = True
+                            if dev_mode or Commons.singleton.is_at_daemon:
+                                self.logger.info(f'jellyfin_refresh At daemon!  {destination_sdir}')
+                                self.jellyfin_refresh(label_handler, destination_sdir)
+                        else:
+                            self.logger.warning(f'Media is NOT in expected location for Jellyfin refresh: '
+                                                f'Expected: "{destination_sdir}"'
+                                                f'Current: "{current_sdir}"')
+
                         # sleep(5)  # wait for file move to complete
                         # # self.logger.info(f'label            "{label}"')
                         # # self.logger.info(f'destination_sdir "{destination_sdir}"')
@@ -217,8 +240,8 @@ class Torrentor:
                         # reply_wrapper = DelugApiTransactionReplyWrapper(reply)
                         # self.logger.remark(reply_wrapper.pressence)
 
-                        if Commons.singleton.is_at_daemon:
-                            self.logger.info(f'jellyfin_refresh At daemon!  {destination_sdir}')
+                        # if Commons.singleton.is_at_daemon:
+                        #     self.logger.info(f'jellyfin_refresh At daemon!  {destination_sdir}')
                         print()
 
                         # x = self.fetch_delugapi_torrent()
@@ -228,8 +251,11 @@ class Torrentor:
                         # pass
                         # self.jellyfin_refresh(label, destination_str)
 
-            self.reaction_response.result = transaction_response.result
-            self.reaction_response.error = transaction_response.error
+            self.reaction_response.result = transaction.response.result
+            self.reaction_response.error = transaction.response.error
+
+            # self.reaction_response.result = transaction_response.result
+            # self.reaction_response.error = transaction_response.error
 
             # Reactor lifecycle is managed by delugapi_wrap / Twistor — do NOT stop here
             return reply
@@ -266,7 +292,13 @@ class Torrentor:
     # # TODO: implement actual Jellyfin API call
     # # POST http://<jellyfin_host>:8096/Library/Refresh
     # # Header: Authorization: MediaBrowser Token="<api_key>"
-    # def jellyfin_refresh(self, label: str, destination: str) -> None:
+    def jellyfin_refresh(self, label_handler: TorrentLabelHandlor, destination: str) -> None:
+        label = label_handler.label
+        library_name = label_handler.jelly_library_name
+        self.logger.exclaim(f'jellyfin_refresh: "{label}" "{library_name}" "{destination}"')
+        communicator = JellyfinCommunicator()
+        communicator.refresh_library(library_name)
+
     #     """Trigger a Jellyfin library rescan after moving media."""
     #     media_labels = ('movin', 'tv-in', 'tv-arc')
     #     if label not in media_labels:
@@ -281,3 +313,5 @@ class Torrentor:
 
     def on_removed(self):
         self.logger.info(f"Torrent '{self.torrent_name}' has been removed..")
+
+
