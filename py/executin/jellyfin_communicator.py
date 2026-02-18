@@ -22,7 +22,7 @@ class JellyfinCommunicator:
         response.raise_for_status()
         return response
 
-    def refresh_library(self, library_name: str):
+    def refresh_library(self, library_name: str, title: str = '') -> None:
         self.logger.exclaim(f"Refreshing Jellyfin library '{library_name}'...")
         library_id = self.fetch_library_name_to_id(library_name)
         self.logger.info(f"Library name '{library_name}' corresponds to library ID '{library_id}'")
@@ -33,25 +33,32 @@ class JellyfinCommunicator:
             "replaceAllImages": "false",
         })
         self.logger.info(f"Jellyfin library '{library_name}' refresh triggered successfully")
-        self.notify_clients_refresh()
+        self.notify_clients_refresh(library_name, title)
 
-    def notify_clients_refresh(self):
-        """Send a RefreshLibrary command to all active Jellyfin sessions."""
+    def notify_clients_refresh(self, library_name: str, title: str = '') -> None:
+        """Send a toast message to all active Jellyfin sessions."""
         response = self._request("GET", "/Sessions")
         sessions = response.json()
+        controllable = [s for s in sessions if s.get("SupportsRemoteControl", False)]
+        self.logger.debug(f"Found {len(controllable)}/{len(sessions)} controllable sessions")
         notified = 0
-        for session in sessions:
+        for session in controllable:
             session_id = session["Id"]
             try:
-                self._request("POST", f"/Sessions/{session_id}/Command", json={
-                    "Name": "RefreshLibrary",
+                txt = f"'{library_name}' library has been refreshed"
+                if title:
+                    txt += f" due to '{title}'"
+                self._request("POST", f"/Sessions/{session_id}/Message", json={
+                    "Header": "Library Updated",
+                    "Text": f'{txt}',
+                    "TimeoutMs": 5000,
                 })
                 notified += 1
-                self.logger.remark(f"Notified session '{session_id}' to refresh library")
+                self.logger.remark(f"Sent toast to session #{notified}  '{session_id}'")
                 self.logger.debug(f"info: {session}")
             except requests.HTTPError:
                 self.logger.debug(f"Could not notify session '{session_id}', skipping")
-        self.logger.info(f"Notified {notified}/{len(sessions)} client sessions to refresh")
+        self.logger.info(f"Notified {notified}/{len(controllable)} controllable client sessions")
 
     def fetch_library_name_to_id(self, library_name: str) -> str:
         self.logger.exclaim(f"Fetching Jellyfin library ID for '{library_name}'")

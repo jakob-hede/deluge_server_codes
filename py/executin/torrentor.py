@@ -295,9 +295,10 @@ class Torrentor:
     def jellyfin_refresh(self, label_handler: TorrentLabelHandlor, destination: str) -> None:
         label = label_handler.label
         library_name = label_handler.jelly_library_name
+        title = label_handler.title
         self.logger.exclaim(f'jellyfin_refresh: "{label}" "{library_name}" "{destination}"')
         communicator = JellyfinCommunicator()
-        communicator.refresh_library(library_name)
+        communicator.refresh_library(library_name, title=title)
 
     #     """Trigger a Jellyfin library rescan after moving media."""
     #     media_labels = ('movin', 'tv-in', 'tv-arc')
