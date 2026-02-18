@@ -181,7 +181,7 @@ class Torrentor:
                             # elif transaction_response.is_valid:
                             self.logger.remark(f"Dispatched moving {delugapi_torrent.name} to '{destination_sdir}'")
                             sleep(0.1)
-                            top = 99
+                            top = 300
                             for i in range(1, top):
                                 self.logger.info(f"Waiting for move to complete... ({i}/{top})")
                                 # Check if move is complete by verifying the torrent's current download location
