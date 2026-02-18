@@ -51,7 +51,6 @@ class JellyfinCommunicator:
                 self._request("POST", f"/Sessions/{session_id}/Message", json={
                     "Header": "Library Updated",
                     "Text": f'{txt}',
-                    "TimeoutMs": 5000,
                 })
                 notified += 1
                 self.logger.remark(f"Sent toast to session #{notified}  '{session_id}'")
