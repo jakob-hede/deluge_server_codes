@@ -179,10 +179,10 @@ class Torrentor:
                             #     self.logger.error(f"Error moving torrent: {transaction_response.error}")
                             # elif transaction_response.is_valid:
                             self.logger.remark(f"Dispatched moving {delugapi_torrent.name} to '{destination_sdir}'")
+                            sleep(0.1)
                             top =99
                             for i in range(1, top):
                                 self.logger.info(f"Waiting for move to complete... ({i}/{top})")
-                                sleep(0.1)
                                 # Check if move is complete by verifying the torrent's current download location
                                 transaction = DelugApiStatusTransaction(torrent_id=self.torrent_id)
                                 reply = yield api_client.api.transactize(transaction)
@@ -194,6 +194,7 @@ class Torrentor:
                                 if current_sdir == destination_sdir:
                                     self.logger.info("Move completed successfully!")
                                     break
+                                sleep(1)
                         else:
                             self.logger.warning('Not at daemon, skipping move')
                     else:
