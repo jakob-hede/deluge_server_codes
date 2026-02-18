@@ -122,10 +122,10 @@ class DelugApiMoveTransaction(DelugApiTransaction):
 
     @defer_inline_callbacks
     def fetch_move(self) -> Generator[Any, Any, dict]:
-        print("coring...")
+        print("fetch_move coring move_storage...")
         torrent_ids: list[str] = [self.torrent_id]
         reply_dict: dict = yield ui_client.core.move_storage(torrent_ids, self.destination)
-        reply_dict = {'status': 'move_dispatched', 'torrent_id': self.torrent_id, 'destination': self.destination}
+        # reply_dict = {'status': 'move_dispatched', 'torrent_id': self.torrent_id, 'destination': self.destination}
         return reply_dict
 
     @defer_inline_callbacks
