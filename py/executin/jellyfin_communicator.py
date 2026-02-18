@@ -15,10 +15,10 @@ class JellyfinCommunicator:
 
         self.logger.exclaim(f"JellyfinCommunicator initialized with app name '{self.app_name}'")
 
-    def _request(self, method: str, path: str) -> requests.Response:
+    def _request(self, method: str, path: str, params: dict | None = None) -> requests.Response:
         url = f"{self.server_url}{path}"
         headers = {"X-Emby-Token": self.api_key}
-        response = requests.request(method, url, headers=headers, timeout=30)
+        response = requests.request(method, url, headers=headers, params=params, timeout=30)
         response.raise_for_status()
         return response
 
@@ -26,7 +26,12 @@ class JellyfinCommunicator:
         self.logger.exclaim(f"Refreshing Jellyfin library '{library_name}'...")
         library_id = self.fetch_library_name_to_id(library_name)
         self.logger.info(f"Library name '{library_name}' corresponds to library ID '{library_id}'")
-        self._request("POST", f"/Items/{library_id}/Refresh")
+        self._request("POST", f"/Items/{library_id}/Refresh", params={
+            "metadataRefreshMode": "FullRefresh",
+            "imageRefreshMode": "FullRefresh",
+            "replaceAllMetadata": "false",
+            "replaceAllImages": "false",
+        })
         self.logger.info(f"Jellyfin library '{library_name}' refresh triggered successfully")
 
     def fetch_library_name_to_id(self, library_name: str) -> str:
