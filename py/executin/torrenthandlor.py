@@ -1,6 +1,7 @@
 from __future__ import annotations
 import re
 import unicodedata
+from functools import cached_property
 from pathlib import Path
 
 from .logge import TorrentHandlorLoggor
@@ -42,6 +43,7 @@ class TorrentHandlor:
         self._delugapi_torrent: DelugapiTorrent | None = delugapi_torrent
         self._survey_data: dict = survey_data
         self._browser_source_data: dict | None = browser_source_data
+        self.is_renamed: bool = False
         if delugapi_torrent:
             torrent_id = delugapi_torrent.tid
             torrent_name = delugapi_torrent.name
@@ -111,6 +113,18 @@ class TorrentLabelHandlor(TorrentHandlor):
         return self._destin_dir
 
     @property
+    def rename_plan(self) -> tuple[str, str] | list[tuple[int, str]] | None:
+        return None
+
+    @property
+    def is_in_pattern_dir(self) -> bool:
+        return False
+
+    @property
+    def pattern_dir(self) -> Path | None:
+        return None
+
+    @property
     def is_jellyable(self) -> bool:
         return self._is_jellyable
 
@@ -122,31 +136,78 @@ class TorrentHandlorMovin(TorrentLabelHandlor):
     _is_jellyable: bool = True
     jelly_library_name = 'movin'
 
+    @cached_property
+    def pattern_dir_name(self) -> str:
+        dir_name = self.title.lower()
+        browser_source_data = self._browser_source_data
+        media_type = browser_source_data.get('media_type') if browser_source_data else None
+        media_title = browser_source_data.get('media_title') if browser_source_data else None
+        record_dir_name = media_dir_name(media_title, browser_source_data.get('media_year')) if media_title else ''
+        if not browser_source_data:
+            self.logger.info(f"Folder named by name rule: '{dir_name}', no browser-source record")
+        elif media_type != 'movie':
+            self.logger.info(f"Folder named by name rule: '{dir_name}', browser-source media_type '{media_type}' is not movie")
+        elif not media_title:
+            self.logger.info(f"Folder named by name rule: '{dir_name}', browser-source record has no media_title")
+        elif not record_dir_name:
+            self.logger.info(f"Folder named by name rule: '{dir_name}', browser-source media_title '{media_title}' sanitizes to nothing")
+        else:
+            dir_name = record_dir_name
+            self.logger.info(f"Folder named by browser-source record: '{dir_name}' (media_via '{browser_source_data.get('media_via')}')")
+        return dir_name
+
     @property
-    def destin_dir(self) -> Path:
-        dest_dir = self._destin_dir
+    def is_in_pattern_dir(self) -> bool:
+        paths = [file['path'] for file in self._delugapi_torrent.files]
+        pattern_dir_name = self.pattern_dir_name
+        return bool(paths) and all(path.startswith(f'{pattern_dir_name}/') for path in paths)
+
+    @property
+    def pattern_dir(self) -> Path | None:
+        return self._destin_dir / self.pattern_dir_name
+
+    @cached_property
+    def rename_plan(self) -> tuple[str, str] | list[tuple[int, str]] | None:
+        # decided by the daemon's file paths, the survey's structure_type is only logged beside;
+        # a folder plan is (folder, new_folder) for rename_folder, a files plan [(index, new_path)] for rename_files
         try:
             structure_type = self._survey_data['torrent_data']['structure']['structure_type']
         except (KeyError, TypeError):
-            self.logger.warning("Could not determine structure_type from survey_data, using base destin_dir")
+            structure_type = None
+        files = self._delugapi_torrent.files
+        paths = [file['path'] for file in files]
+        root_parts = {path.split('/', 1)[0] for path in paths}
+        if not paths:
+            self.logger.info(f"No rename plan, torrent has no files (structure_type '{structure_type}')")
+            return None
+        if all('/' in path for path in paths) and len(root_parts) == 1:
+            folder = root_parts.pop()
+            pattern_dir_name = self.pattern_dir_name
+            if self.is_in_pattern_dir:
+                self.logger.info(f"No rename plan, files already in '{pattern_dir_name}/' (structure_type '{structure_type}')")
+                return None
+            rename_plan = (f'{folder}/', f'{pattern_dir_name}/')
+        elif len(paths) == 1 and '/' not in paths[0]:
+            pattern_dir_name = self.pattern_dir_name
+            rename_plan = [(files[0]['index'], f'{pattern_dir_name}/{paths[0]}')]
+        else:
+            self.logger.info(f"No rename plan, files not under one root folder (structure_type '{structure_type}')")
+            return None
+        self.logger.info(f"Rename plan: {rename_plan} (structure_type '{structure_type}')")
+        return rename_plan
+
+    @property
+    def destin_dir(self) -> Path:
+        dest_dir = self._destin_dir
+        if self.is_renamed:
             return dest_dir
+        try:
+            structure_type = self._survey_data['torrent_data']['structure']['structure_type']
+        except (KeyError, TypeError):
+            self.logger.warning("Could not determine structure_type from survey_data, nesting under pattern folder for safety")
+            return self._destin_dir / self.pattern_dir_name
         if not structure_type == 'single_directory':
-            dir_name = self.title.lower()
-            browser_source_data = self._browser_source_data
-            media_type = browser_source_data.get('media_type') if browser_source_data else None
-            media_title = browser_source_data.get('media_title') if browser_source_data else None
-            record_dir_name = media_dir_name(media_title, browser_source_data.get('media_year')) if media_title else ''
-            if not browser_source_data:
-                self.logger.info(f"Folder named by name rule: '{dir_name}', no browser-source record")
-            elif media_type != 'movie':
-                self.logger.info(f"Folder named by name rule: '{dir_name}', browser-source media_type '{media_type}' is not movie")
-            elif not media_title:
-                self.logger.info(f"Folder named by name rule: '{dir_name}', browser-source record has no media_title")
-            elif not record_dir_name:
-                self.logger.info(f"Folder named by name rule: '{dir_name}', browser-source media_title '{media_title}' sanitizes to nothing")
-            else:
-                dir_name = record_dir_name
-                self.logger.info(f"Folder named by browser-source record: '{dir_name}' (media_via '{browser_source_data.get('media_via')}')")
+            dir_name = self.pattern_dir_name
             dest_dir = self._destin_dir / dir_name
         return dest_dir
 

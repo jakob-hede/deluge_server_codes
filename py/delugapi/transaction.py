@@ -167,3 +167,51 @@ class DelugApiLabelTransaction(DelugApiTransaction):
         print("fetch_set_label labeling set_torrent...")
         reply_dict: dict = yield ui_client.label.set_torrent(self.torrent_id, self.label)
         return reply_dict
+
+
+class DelugApiRenameFolderTransaction(DelugApiTransaction):
+    def __init__(self, torrent_id: str, folder: str, new_folder: str) -> None:
+        super().__init__()
+        self.torrent_id: str = torrent_id
+        self.folder: str = folder
+        self.new_folder: str = new_folder
+        self.timeout: float = 60
+
+    @defer_inline_callbacks
+    def executize(self) -> Generator[Any, Any, dict]:  # noqa
+        print(f"executize {self.__class__.__name__}...")
+        reply: dict = yield self.fetch_rename_folder()
+        return reply
+
+    @defer_inline_callbacks
+    def fetch_rename_folder(self) -> Generator[Any, Any, dict]:
+        from twisted.internet import reactor
+        print("fetch_rename_folder coring rename_folder...")
+        deferred = ui_client.core.rename_folder(self.torrent_id, self.folder, self.new_folder)
+        # deluge has no handler for a failed file rename, so its reply may never come
+        deferred.addTimeout(self.timeout, reactor)
+        reply_dict: dict = yield deferred
+        return reply_dict
+
+
+class DelugApiRenameFilesTransaction(DelugApiTransaction):
+    def __init__(self, torrent_id: str, filenames: list[tuple[int, str]]) -> None:
+        super().__init__()
+        self.torrent_id: str = torrent_id
+        self.filenames: list[tuple[int, str]] = filenames
+        self.timeout: float = 60
+
+    @defer_inline_callbacks
+    def executize(self) -> Generator[Any, Any, dict]:  # noqa
+        print(f"executize {self.__class__.__name__}...")
+        reply: dict = yield self.fetch_rename_files()
+        return reply
+
+    @defer_inline_callbacks
+    def fetch_rename_files(self) -> Generator[Any, Any, dict]:
+        from twisted.internet import reactor
+        print("fetch_rename_files coring rename_files...")
+        deferred = ui_client.core.rename_files(self.torrent_id, self.filenames)
+        deferred.addTimeout(self.timeout, reactor)
+        reply_dict: dict = yield deferred
+        return reply_dict

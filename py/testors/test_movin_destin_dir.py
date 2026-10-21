@@ -32,7 +32,7 @@ class Testor:
             ('movie, punctuation title', single_file_survey, {**movie_record, 'media_title': '...'}, f'{movin_dir}/the.florist'),
             ('single_directory, movie record', single_directory_survey, movie_record, movin_dir),
             ('single_directory, no record', single_directory_survey, None, movin_dir),
-            ('no survey, movie record', {}, movie_record, movin_dir),
+            ('no survey, movie record', {}, movie_record, f'{movin_dir}/the.florist.2026'),
         ]
         all_as_expected = True
         for case_name, survey_data, browser_source_data, expected in cases:

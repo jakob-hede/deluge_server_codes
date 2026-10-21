@@ -18,6 +18,7 @@ from twisted.internet import defer
 
 from delugapi import DelugapiClient
 from delugapi.transaction import DelugApiStatusTransaction, DelugApiMoveTransaction, DelugApiLabelTransaction
+from delugapi.transaction import DelugApiRenameFolderTransaction, DelugApiRenameFilesTransaction
 
 type deferred_response = Generator[Any, Any, dict | None]
 
@@ -230,6 +231,48 @@ class Torrentor:
                 )
                 if label_handler:
                     torrent_id = delugapi_torrent.tid
+                    rename_plan = label_handler.rename_plan
+                    if rename_plan is None and label_handler.is_in_pattern_dir:
+                        label_handler.is_renamed = True
+                        self.logger.info(f'Already in pattern folder "{label_handler.pattern_dir_name}/", no rename')
+                    elif rename_plan is not None:
+                        if Commons.singleton.is_at_daemon:
+                            self.logger.info(f'At daemon, renaming by plan {rename_plan} ...')
+                            new_folder = f'{label_handler.pattern_dir_name}/'
+                            # a folder plan is a (folder, new_folder) tuple, a files plan a list of (index, new_path)
+                            if isinstance(rename_plan, tuple):
+                                folder, new_folder = rename_plan
+                                transaction = DelugApiRenameFolderTransaction(torrent_id=torrent_id,
+                                                                              folder=folder,
+                                                                              new_folder=new_folder)
+                            else:
+                                transaction = DelugApiRenameFilesTransaction(torrent_id=torrent_id,
+                                                                             filenames=rename_plan)
+                            reply = yield api_client.api.transactize(transaction)
+                            transaction_response = transaction.response
+                            print(f"transaction_response: {transaction_response}")
+                            if transaction_response.error:
+                                self.logger.error(f"Error renaming, moving as not renamed: {transaction_response.error}")
+                            else:
+                                self.logger.remark(
+                                    f"Dispatched renaming {delugapi_torrent.name} to '{new_folder}', {str(transaction_response).strip()}")
+                                top = 60
+                                for i in range(1, top + 1):
+                                    transaction = DelugApiStatusTransaction(torrent_id=self.torrent_id)
+                                    reply = yield api_client.api.transactize(transaction)
+                                    updated_torrent = transaction.delugapi_torrent_from_status()
+                                    current_paths = [file['path'] for file in updated_torrent.files] if updated_torrent else []
+                                    first_path = current_paths[0] if current_paths else ''
+                                    self.logger.info(f"Waiting for rename to complete... ({i}/{top}) first path: '{first_path}'")
+                                    if current_paths and all(path.startswith(new_folder) for path in current_paths):
+                                        label_handler.is_renamed = True
+                                        self.logger.info("Rename completed successfully!")
+                                        break
+                                    sleep(1)
+                                if not label_handler.is_renamed:
+                                    self.logger.warning(f'Rename not reported after {top} rounds, moving as not renamed')
+                        else:
+                            self.logger.warning('Not at daemon, skipping rename')
                     destination_dir = label_handler.destin_dir
                     origin_dir = delugapi_torrent.download_location
                     destination_sdir = str(destination_dir)
@@ -242,6 +285,10 @@ class Torrentor:
                     if destination_sdir != delugapi_torrent.download_location:
                         if Commons.singleton.is_at_daemon:
                             self.logger.info(f'At daemon, moving torrent from "{origin_sdir}" ...')
+                            pattern_dir = label_handler.pattern_dir
+                            if pattern_dir is not None and pattern_dir.exists():
+                                self.logger.warning(
+                                    f'Pattern folder "{pattern_dir}" already exists, moving anyway, its files are not replaced')
                             if not destination_dir.is_dir():
                                 destination_dir.mkdir(parents=True, exist_ok=True)
                             transaction = DelugApiMoveTransaction(torrent_id=torrent_id,
