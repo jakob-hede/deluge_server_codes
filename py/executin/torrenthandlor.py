@@ -1,8 +1,29 @@
 from __future__ import annotations
+import re
+import unicodedata
 from pathlib import Path
 
 from .logge import TorrentHandlorLoggor
 from delugapi.torrent import DelugapiTorrent
+
+
+media_letter_spellings: dict[str, str] = {
+    'æ': 'ae', 'ø': 'oe', 'å': 'aa', 'œ': 'oe', 'ß': 'ss', 'ð': 'd', 'þ': 'th', 'ł': 'l', 'đ': 'd',
+    'Æ': 'AE', 'Ø': 'OE', 'Å': 'AA', 'Œ': 'OE', 'Ð': 'D', 'Þ': 'TH', 'Ł': 'L', 'Đ': 'D',
+}
+
+
+def media_dir_name(media_title: str, media_year: int | None) -> str:
+    """Folder name from a browser-source record's media_title and media_year, '' when the title sanitizes to nothing."""
+    spelled_title = ''.join(media_letter_spellings.get(c, c) for c in media_title)
+    decomposed_title = unicodedata.normalize('NFKD', spelled_title)
+    plain_title = ''.join(c for c in decomposed_title if not unicodedata.combining(c))
+    dir_name = re.sub(r'[^a-z0-9]+', '.', plain_title.lower()).strip('.')
+    if not dir_name:
+        return ''
+    if isinstance(media_year, int):
+        dir_name = f'{dir_name}.{media_year}'
+    return dir_name
 
 
 class TorrentHandlor:
@@ -11,6 +32,7 @@ class TorrentHandlor:
     def __init__(self,
                  delugapi_torrent: DelugapiTorrent | None = None,  # todo> make 2 required and only args
                  survey_data: dict | None = None,
+                 browser_source_data: dict | None = None,
                  torrent_id: str = '',
                  torrent_name: str = '',
                  base_dir: str = '',
@@ -19,6 +41,7 @@ class TorrentHandlor:
                  ):
         self._delugapi_torrent: DelugapiTorrent | None = delugapi_torrent
         self._survey_data: dict = survey_data
+        self._browser_source_data: dict | None = browser_source_data
         if delugapi_torrent:
             torrent_id = delugapi_torrent.tid
             torrent_name = delugapi_torrent.name
@@ -109,6 +132,21 @@ class TorrentHandlorMovin(TorrentLabelHandlor):
             return dest_dir
         if not structure_type == 'single_directory':
             dir_name = self.title.lower()
+            browser_source_data = self._browser_source_data
+            media_type = browser_source_data.get('media_type') if browser_source_data else None
+            media_title = browser_source_data.get('media_title') if browser_source_data else None
+            record_dir_name = media_dir_name(media_title, browser_source_data.get('media_year')) if media_title else ''
+            if not browser_source_data:
+                self.logger.info(f"Folder named by name rule: '{dir_name}', no browser-source record")
+            elif media_type != 'movie':
+                self.logger.info(f"Folder named by name rule: '{dir_name}', browser-source media_type '{media_type}' is not movie")
+            elif not media_title:
+                self.logger.info(f"Folder named by name rule: '{dir_name}', browser-source record has no media_title")
+            elif not record_dir_name:
+                self.logger.info(f"Folder named by name rule: '{dir_name}', browser-source media_title '{media_title}' sanitizes to nothing")
+            else:
+                dir_name = record_dir_name
+                self.logger.info(f"Folder named by browser-source record: '{dir_name}' (media_via '{browser_source_data.get('media_via')}')")
             dest_dir = self._destin_dir / dir_name
         return dest_dir
 

@@ -221,10 +221,12 @@ class Torrentor:
             if label:
                 print(f' - label: "{label}"')
                 survey_data = self.survey_file_read_data()
+                browser_source_data = self.browser_source_file_read_data()
                 label_handler = TorrentLabelHandlor.factory(
                     label,
                     delugapi_torrent=delugapi_torrent,
                     survey_data=survey_data,
+                    browser_source_data=browser_source_data,
                 )
                 if label_handler:
                     torrent_id = delugapi_torrent.tid
