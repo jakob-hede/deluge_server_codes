@@ -12,6 +12,7 @@ class DelugapiTorrent:
                  save_path: str = '',
                  move_completed_path: str = '',
                  label: str = '',
+                 total_wanted: int = 0,
                  ):
         self.tid = tid
         self.name = name
@@ -21,6 +22,7 @@ class DelugapiTorrent:
         self.save_path = save_path
         self.move_completed_path = move_completed_path
         self.label = label
+        self.total_wanted = total_wanted
 
     def __str__(self) -> str:
         txt = f'<DelugapiTorrent: id={self.tid}, title="{self.title}">'
@@ -41,6 +43,7 @@ class DelugapiTorrent:
         save_path: str = data.get('save_path', '')
         move_completed_path: str = data.get('move_completed_path', '')
         label: str = data.get('label', '')
+        total_wanted: int = data.get('total_wanted', 0)
         instance = cls(
             tid=tid,
             name=name,
@@ -50,6 +53,7 @@ class DelugapiTorrent:
             save_path=save_path,
             move_completed_path=move_completed_path,
             label=label,
+            total_wanted=total_wanted,
         )
         return instance
 

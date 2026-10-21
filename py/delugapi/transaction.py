@@ -39,6 +39,7 @@ class DelugApiStatusTransaction(DelugApiTransaction):
     hash
     files
     orig_files
+    total_wanted
     '''.strip().split()
 
     def __init__(self, torrent_id: str = '') -> None:

@@ -1,8 +1,13 @@
 from __future__ import annotations
+import os
 import re
 import unicodedata
+import xml.etree.ElementTree as ET
+from datetime import datetime
 from functools import cached_property
 from pathlib import Path
+
+import yaml
 
 from .logge import TorrentHandlorLoggor
 from delugapi.torrent import DelugapiTorrent
@@ -95,6 +100,7 @@ class TorrentLabelHandlor(TorrentHandlor):
     _is_jellyable: bool = False
     jelly_wrong_library_name: str = 'wrong-name'
     jelly_library_name: str = jelly_wrong_library_name
+    current_files: list[dict] | None = None
 
     @classmethod
     def factory(cls, label: str, **kwargs) -> TorrentLabelHandlor | None:
@@ -123,6 +129,40 @@ class TorrentLabelHandlor(TorrentHandlor):
     @property
     def pattern_dir(self) -> Path | None:
         return None
+
+    @property
+    def sidecar_dir(self) -> Path | None:
+        return None
+
+    @property
+    def sidecar_files(self) -> dict[str, str]:
+        return {}
+
+    def write_sidecars(self, sidecar_dir: Path) -> list[Path]:
+        # a sidecar that cannot be built or written is logged and skipped, it never blocks the move
+        sidecar_paths: list[Path] = []
+        try:
+            sidecar_files = self.sidecar_files
+        except Exception as exc:
+            self.logger.error(f"Sidecars not built: {exc!r}")
+            return sidecar_paths
+        try:
+            sidecar_dir.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            self.logger.error(f"Sidecar folder not made: '{sidecar_dir}', {exc}")
+            return sidecar_paths
+        for name, content in sidecar_files.items():
+            sidecar_path = sidecar_dir / name
+            tmp_path = sidecar_dir / f'.{name}.{os.getpid()}.tmp'
+            try:
+                tmp_path.write_text(content, encoding='utf-8')
+                os.replace(tmp_path, sidecar_path)
+            except OSError as exc:
+                self.logger.error(f"Sidecar not written: '{sidecar_path}', {exc}")
+                continue
+            self.logger.info(f"Sidecar written: '{sidecar_path}'")
+            sidecar_paths.append(sidecar_path)
+        return sidecar_paths
 
     @property
     def is_jellyable(self) -> bool:
@@ -210,6 +250,87 @@ class TorrentHandlorMovin(TorrentLabelHandlor):
             dir_name = self.pattern_dir_name
             dest_dir = self._destin_dir / dir_name
         return dest_dir
+
+    @property
+    def latest_files(self) -> list[dict]:
+        # the daemon's files as last read: after a confirmed rename, else as fetched before it
+        return self.current_files if self.current_files is not None else self._delugapi_torrent.files
+
+    @property
+    def sidecar_dir(self) -> Path | None:
+        # the folder that will hold the largest file after the move, where Jellyfin puts its own files
+        files = self.latest_files
+        if not files:
+            self.logger.info("No sidecar folder, torrent has no files")
+            return None
+        largest_file = max(files, key=lambda file: file.get('size', 0))
+        return self.destin_dir / Path(largest_file['path']).parent
+
+    @property
+    def sidecar_files(self) -> dict[str, str]:
+        browser_source_data = self._browser_source_data
+        media_type = browser_source_data.get('media_type') if browser_source_data else None
+        media_title = browser_source_data.get('media_title') if browser_source_data else None
+        has_id = bool(browser_source_data.get('imdb_id') or browser_source_data.get('tmdb_id')) if browser_source_data else False
+        ships_own_nfo = any(Path(file['path']).name == 'movie.nfo' for file in self.latest_files)
+        sidecar_files = {'provenance.yml': self.provenance_yml}
+        if not browser_source_data:
+            self.logger.info(f"Sidecars {list(sidecar_files)}, no movie.nfo, no browser-source record")
+        elif media_type != 'movie':
+            self.logger.info(f"Sidecars {list(sidecar_files)}, no movie.nfo, browser-source media_type '{media_type}' is not movie")
+        elif not media_title:
+            self.logger.info(f"Sidecars {list(sidecar_files)}, no movie.nfo, browser-source record has no media_title")
+        elif not has_id:
+            self.logger.info(f"Sidecars {list(sidecar_files)}, no movie.nfo, browser-source record has no imdb_id or tmdb_id")
+        elif ships_own_nfo:
+            self.logger.info(f"Sidecars {list(sidecar_files)}, no movie.nfo, the torrent ships its own")
+        else:
+            sidecar_files['movie.nfo'] = self.movie_nfo
+            self.logger.info(f"Sidecars {list(sidecar_files)}")
+        return sidecar_files
+
+    @property
+    def movie_nfo(self) -> str:
+        # read by Jellyfin before its own lookup, then rewritten whole by its nfo saver
+        browser_source_data = self._browser_source_data
+        media_year = browser_source_data.get('media_year')
+        imdb_id = browser_source_data.get('imdb_id')
+        tmdb_id = browser_source_data.get('tmdb_id')
+        movie = ET.Element('movie')
+        ET.SubElement(movie, 'title').text = browser_source_data['media_title']
+        if media_year is not None:
+            ET.SubElement(movie, 'year').text = str(media_year)
+        if imdb_id:
+            ET.SubElement(movie, 'imdbid').text = str(imdb_id)
+        if tmdb_id:
+            ET.SubElement(movie, 'tmdbid').text = str(tmdb_id)
+        if imdb_id:
+            ET.SubElement(movie, 'uniqueid', type='imdb', default='true').text = str(imdb_id)
+        if tmdb_id:
+            ET.SubElement(movie, 'uniqueid', type='tmdb').text = str(tmdb_id)
+        ET.indent(movie, space='  ')
+        movie_xml = ET.tostring(movie, encoding='unicode')
+        return f'<?xml version="1.0" encoding="utf-8" standalone="yes"?>\n{movie_xml}\n'
+
+    @property
+    def provenance_yml(self) -> str:
+        browser_source_data = self._browser_source_data
+        # the record's magnet, subtitles and extras are long and stay in the record itself
+        click = {key: value for key, value in browser_source_data.items()
+                 if key not in ('magnet', 'subtitles', 'extras')} if browser_source_data else None
+        provenance = {
+            'written': datetime.now().astimezone().isoformat(timespec='seconds'),
+            'infohash': self.torrent_id,
+            'label': self.label,
+            'release_name': self._delugapi_torrent.name,  # as fetched before the rename
+            'folder': self.pattern_dir_name,
+            'renamed': self.is_renamed,
+            'destination': str(self.destin_dir),
+            'orig_files': [file['path'] for file in self._delugapi_torrent.orig_files],
+            'files': [file['path'] for file in self.latest_files],
+            'click': click,
+        }
+        return yaml.safe_dump(provenance, sort_keys=False, allow_unicode=True)
 
 
 class TorrentHandlorTvin(TorrentLabelHandlor):

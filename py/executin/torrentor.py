@@ -23,6 +23,11 @@ from delugapi.transaction import DelugApiRenameFolderTransaction, DelugApiRename
 type deferred_response = Generator[Any, Any, dict | None]
 
 
+def move_cap_rounds(total_wanted: int) -> int:
+    """Rounds of one second the move is waited for: 20 MiB/s, at least five minutes, at most one hour."""
+    return max(300, min(3600, total_wanted // (20 * 1024 * 1024)))
+
+
 class Torrentor:
     torrents_dir: Path = Commons.singleton.deluge_root_dir / 'torrents'
     surveys_dir: Path = Commons.singleton.deluge_root_dir / 'surveys'
@@ -266,6 +271,7 @@ class Torrentor:
                                     self.logger.info(f"Waiting for rename to complete... ({i}/{top}) first path: '{first_path}'")
                                     if current_paths and all(path.startswith(new_folder) for path in current_paths):
                                         label_handler.is_renamed = True
+                                        label_handler.current_files = updated_torrent.files
                                         self.logger.info("Rename completed successfully!")
                                         break
                                     sleep(1)
@@ -289,6 +295,10 @@ class Torrentor:
                             if pattern_dir is not None and pattern_dir.exists():
                                 self.logger.warning(
                                     f'Pattern folder "{pattern_dir}" already exists, moving anyway, its files are not replaced')
+                            sidecar_dir = label_handler.sidecar_dir
+                            if sidecar_dir is not None:
+                                self.logger.info(f"Writing sidecars to '{sidecar_dir}' before the move")
+                                label_handler.write_sidecars(sidecar_dir)
                             if not destination_dir.is_dir():
                                 destination_dir.mkdir(parents=True, exist_ok=True)
                             transaction = DelugApiMoveTransaction(torrent_id=torrent_id,
@@ -302,7 +312,8 @@ class Torrentor:
                             # elif transaction_response.is_valid:
                             self.logger.remark(f"Dispatched moving {delugapi_torrent.name} to '{destination_sdir}'")
                             sleep(0.1)
-                            top = 300
+                            top = move_cap_rounds(delugapi_torrent.total_wanted)
+                            self.logger.info(f"Move cap {top} rounds for {delugapi_torrent.total_wanted} bytes")
                             for i in range(1, top):
                                 self.logger.info(f"Waiting for move to complete... ({i}/{top})")
                                 # Check if move is complete by verifying the torrent's current download location
