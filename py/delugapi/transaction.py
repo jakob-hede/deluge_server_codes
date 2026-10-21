@@ -148,3 +148,22 @@ class DelugApiMoveTransaction(DelugApiTransaction):
         torrent_ids: list[str] = [self.torrent_id]
         reply_dict: dict = yield ui_client.core.force_recheck(torrent_ids)
         return reply_dict
+
+
+class DelugApiLabelTransaction(DelugApiTransaction):
+    def __init__(self, torrent_id: str, label: str) -> None:
+        super().__init__()
+        self.torrent_id: str = torrent_id
+        self.label: str = label
+
+    @defer_inline_callbacks
+    def executize(self) -> Generator[Any, Any, dict]:  # noqa
+        print(f"executize {self.__class__.__name__}...")
+        reply: dict = yield self.fetch_set_label()
+        return reply
+
+    @defer_inline_callbacks
+    def fetch_set_label(self) -> Generator[Any, Any, dict]:
+        print("fetch_set_label labeling set_torrent...")
+        reply_dict: dict = yield ui_client.label.set_torrent(self.torrent_id, self.label)
+        return reply_dict

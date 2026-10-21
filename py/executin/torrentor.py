@@ -17,7 +17,7 @@ from typing import Generator, Any
 from twisted.internet import defer
 
 from delugapi import DelugapiClient
-from delugapi.transaction import DelugApiStatusTransaction, DelugApiMoveTransaction
+from delugapi.transaction import DelugApiStatusTransaction, DelugApiMoveTransaction, DelugApiLabelTransaction
 
 type deferred_response = Generator[Any, Any, dict | None]
 
@@ -25,6 +25,7 @@ type deferred_response = Generator[Any, Any, dict | None]
 class Torrentor:
     torrents_dir: Path = Commons.singleton.deluge_root_dir / 'torrents'
     surveys_dir: Path = Commons.singleton.deluge_root_dir / 'surveys'
+    browser_source_dir: Path = Commons.singleton.deluge_root_dir / 'browser-source'
 
     def __init__(self, torrent_id, torrent_name, base_sdir):
         self.torrent_id: str = torrent_id
@@ -37,7 +38,7 @@ class Torrentor:
         print(f"Processing event '{event_name}' for torrent '{self.torrent_name}' ({self.torrent_id})")
         # Here you would add logic to handle different events
         if event_name == 'exe_added':
-            self.on_added()
+            return self.on_added()
         elif event_name == 'exe_completed':
             return self.on_completed()
         elif event_name == 'exe_removed':
@@ -63,27 +64,98 @@ class Torrentor:
         data: dict = yaml.safe_load(survey_yaml)
         return data
 
-    def on_added(self):
+    @property
+    def browser_source_file(self) -> Path:
+        return self.browser_source_dir / f'{self.torrent_id}.yml'
+
+    def browser_source_file_read_data(self) -> dict:
+        if not self.browser_source_file.exists():
+            print(f"Error: Browser-source file '{self.browser_source_file}' not found")
+            return {}
+        browser_source_yaml = self.browser_source_file.read_text()
+        data: dict = yaml.safe_load(browser_source_yaml)
+        return data
+
+    def on_added(self) -> Deferred:
         """Create a survey file when a torrent is added."""
         self.logger.info(f"Torrent '{self.torrent_name}' has been added..")
-        torrent_file = self.torrents_dir / f"{self.torrent_name}.torrent"
-        if torrent_file.exists():
-            self.logger.info(f"SUCCES: Torrent file '{torrent_file}' exists")
+
+        api_client: DelugapiClient = Commons.singleton.api_client
+
+        @defer.inlineCallbacks
+        def reactize() -> deferred_response:
+            print('reactize')
+            transaction = None
+            reply = {}
+            browser_source_data = self.browser_source_file_read_data()
+            label_hint = browser_source_data.get('label_hint') if browser_source_data else None
+            if not browser_source_data:
+                self.logger.info(f"No browser-source file '{self.browser_source_file}', skipping label")
+            elif label_hint not in ('movin', 'tv-in', 'tv-arc'):
+                self.logger.info(f"Browser-source label_hint '{label_hint}' is not a label, skipping label")
+            else:
+                self.logger.info(f"Browser-source label_hint '{label_hint}' from '{self.browser_source_file}'")
+                transaction = DelugApiStatusTransaction(torrent_id=self.torrent_id)
+                reply = yield api_client.api.transactize(transaction)
+                delugapi_torrent = transaction.delugapi_torrent_from_status()
+                print(f' - delugapi_torrent: {delugapi_torrent}')
+                self.logger.remark(transaction.pressence)
+
+                if delugapi_torrent is None:
+                    self.logger.warning(f"No status for torrent '{self.torrent_id}', skipping label")
+                elif delugapi_torrent.label:
+                    self.logger.info(
+                        f'Label "{delugapi_torrent.label}" already set, hand-set label wins, skipping "{label_hint}"')
+                else:
+                    self.logger.info(f'Setting label "{label_hint}" for "{delugapi_torrent.title}"')
+                    transaction = DelugApiLabelTransaction(torrent_id=self.torrent_id, label=label_hint)
+                    reply = yield api_client.api.transactize(transaction)
+                    transaction_response = transaction.response
+                    print(f"transaction_response: {transaction_response}")
+                    if transaction_response.error:
+                        self.logger.error(f"Error setting label: {transaction_response.error}")
+                    else:
+                        self.logger.remark(f"Dispatched label '{label_hint}' for {delugapi_torrent.name}")
+
+                    transaction = DelugApiStatusTransaction(torrent_id=self.torrent_id)
+                    reply = yield api_client.api.transactize(transaction)
+                    updated_torrent = transaction.delugapi_torrent_from_status()
+                    current_label = updated_torrent.label if updated_torrent else None
+                    self.logger.info(f"Current label: '{current_label}'")
+
+            if transaction is not None:
+                self.reaction_response.result = transaction.response.result
+                self.reaction_response.error = transaction.response.error
+
+            torrent_file = self.torrents_dir / f"{self.torrent_name}.torrent"
+            if torrent_file.exists():
+                self.logger.info(f"SUCCES: Torrent file '{torrent_file}' exists")
+            else:
+                self.logger.info(f"Error: Torrent file '{torrent_file}' not found")
+                return
+            survey_data: dict = {}
+            execute_args_data: dict = {
+                'torrent_id': self.torrent_id,
+                'torrent_name': self.torrent_name,
+                'added_base_dir': self.base_sdir,
+                'timestamp': Commons.singleton.timestamp(),
+            }
+            survey_data['execute_args'] = execute_args_data
+            parsor = TorrentParsor(torrent_file)
+            torrent_data = parsor.parse()
+            survey_data['torrent_data'] = torrent_data
+            self.survey_file_write_data(survey_data)
+
+            # Reactor lifecycle is managed by delugapi_wrap / Twistor — do NOT stop here
+            return reply
+
+        self.reaction_response = DelugApiResponse()
+        d = DelugApi.delugapi_wrap(reactize)
+        if d is not None:
+            print(f"on_added: Deferred pending (reactor already running)")
         else:
-            self.logger.info(f"Error: Torrent file '{torrent_file}' not found")
-            return
-        survey_data: dict = {}
-        execute_args_data: dict = {
-            'torrent_id': self.torrent_id,
-            'torrent_name': self.torrent_name,
-            'added_base_dir': self.base_sdir,
-            'timestamp': Commons.singleton.timestamp(),
-        }
-        survey_data['execute_args'] = execute_args_data
-        parsor = TorrentParsor(torrent_file)
-        torrent_data = parsor.parse()
-        survey_data['torrent_data'] = torrent_data
-        self.survey_file_write_data(survey_data)
+            print(f"on_added response: {self.reaction_response}")
+        return d
 
     # def _x_fetch_delugapi_torrent(self) -> DelugapiTorrent:
     #     print('fetch_delugapi_torrent')
