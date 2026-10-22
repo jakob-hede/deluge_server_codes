@@ -26,9 +26,10 @@ class JellyfinCommunicator:
         self.logger.exclaim(f"Refreshing Jellyfin library '{library_name}'...")
         library_id = self.fetch_library_name_to_id(library_name)
         self.logger.info(f"Library name '{library_name}' corresponds to library ID '{library_id}'")
+        # default mode, since in Jellyfin 10.11 its merge takes the nfo's title for a new item, where a full refresh without replaceAllMetadata keeps the folder name
         self._request("POST", f"/Items/{library_id}/Refresh", params={
-            "metadataRefreshMode": "FullRefresh",
-            "imageRefreshMode": "FullRefresh",
+            "metadataRefreshMode": "Default",
+            "imageRefreshMode": "Default",
             "replaceAllMetadata": "false",
             "replaceAllImages": "false",
         })
