@@ -48,15 +48,15 @@ class Testor:
 
     def case_leftovers_only(self):
         folder = self.lay_out(self.library / 'the.florist.2026', self.leftovers)
-        self.judge(folder, True, {folder: False, self.library: True}, 'deleted, 8 leftovers', 8)
+        self.judge(folder, True, {folder: False, self.library: True}, 'deleted with 7 files', 7)
 
     def case_video_at_root(self):
         folder = self.lay_out(self.library / 'the.florist.2026', self.leftovers + ['the.florist.2026.mkv'])
-        self.judge(folder, False, {folder: True}, 'kept: video still present after 3 rounds')
+        self.judge(folder, False, {folder: True}, 'kept, video still present after 3 rounds')
 
     def case_video_in_subs(self):
         folder = self.lay_out(self.library / 'the.florist.2026', self.leftovers + ['Subs/clip.MKV'])
-        self.judge(folder, False, {folder: True}, 'kept: video still present after 3 rounds')
+        self.judge(folder, False, {folder: True}, 'kept, video still present after 3 rounds')
 
     def case_library_itself(self):
         self.lay_out(self.library, self.leftovers)
@@ -96,7 +96,7 @@ class Testor:
         real_sleep = torrentor_module.sleep
         torrentor_module.sleep = sleeper
         try:
-            self.judge(folder, True, {folder: False}, 'deleted, 8 leftovers', 8, top=5)
+            self.judge(folder, True, {folder: False}, 'deleted with 7 files', 7, top=5)
         finally:
             torrentor_module.sleep = real_sleep
         print(f"sleeps: {len(sleep_calls)}")
@@ -135,7 +135,7 @@ class Testor:
     def case_double_wrapped(self):
         parent = self.library / 'moonrise.kingdom.2012'
         folder = self.lay_out(parent / 'Moonrise Kingdom (2012) Criterion (2160p)', self.leftovers)
-        self.judge(folder, True, {folder: False, parent: True}, 'deleted, 8 leftovers', 8,
+        self.judge(folder, True, {folder: False, parent: True}, 'deleted with 7 files', 7,
                    diversions=("parent moonrise.kingdom.2012/ holds no video, left for the operator's hand",))
 
     def case_climbing_path(self):
@@ -148,7 +148,7 @@ class Testor:
         outside = self.lay_out(self.base / 'outside', ['other.mkv'])
         folder = self.lay_out(self.library / 'the.florist.2026', self.leftovers)
         (folder / 'linked').symlink_to(outside, target_is_directory=True)
-        self.judge(folder, True, {folder: False, outside / 'other.mkv': True}, 'deleted, 9 leftovers', 9)
+        self.judge(folder, True, {folder: False, outside / 'other.mkv': True}, 'deleted with 8 files', 8)
 
     def executize(self):
         print("Testor.executize...")

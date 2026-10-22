@@ -1,5 +1,10 @@
 """The hook's voice over ntfy: one message per completed or removed event, one more only when the hook dies.
 
+Written for a human on a phone, in the click's voice at the magnetics end: the title is a verb and the name
+a human thinks in (naming.HumanNamor, one text at both ends), the first body line the outcome, then each
+diversion on its own `!` line, then the details, the hash last; the first tag an emoji name, so the kind
+reads before the words.
+
 Speaks through the ntfying package of the ntfy_client clone, which testors/import_helpor.py puts on
 sys.path (nested at /codes/ntfy_client on media-docker, the sibling clone on the dev box). Fail-open:
 a missing clone, a missing dotenv, a bad token, a dead or slow server, each is one warning in the
@@ -8,7 +13,9 @@ log, and the hook goes on as it would have without a voice; a publish waits at m
 from __future__ import annotations
 
 from pathlib import PurePosixPath
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
+
+from .naming import HumanNamor
 
 if TYPE_CHECKING:
     from delugapi.torrent import DelugapiTorrent
@@ -21,11 +28,15 @@ video_root_dir = PurePosixPath('/ocean/video')
 class HookAnnouncor:
     """Says what the hook did; collects the diversions the flow went on past; never raises."""
 
+    # ntfy shows a tag that is an emoji shortcode as that emoji before the title
+    kind_tags: ClassVar[dict[str, str]] = {'completed': 'white_check_mark', 'removed': 'wastebasket', 'failed': 'x'}
+
     def __init__(self, logger: Loggor):
         super().__init__()
         self.logger = logger
         self.stage: str = 'status'  # set by the flow as it goes, for a failed message
         self.label: str | None = None  # set by the flow once the status is read, for a failed message
+        self.record: dict | None = None  # the click record once the flow has read it, to name a failed message
         self._diversions: list[str] = []
         self._failure: str | None = None
 
@@ -40,7 +51,7 @@ class HookAnnouncor:
 
     def say(self, kind: str, title: str, lines: list[str], *, priority: str | None = None,
             tags: tuple[str, ...] = ()) -> str | None:
-        """One message, tags [kind, *tags], the sender added by ntfying; its id, or None."""
+        """One message, tags [the kind's emoji, *tags], the sender added by ntfying; its id, or None."""
         self._failure = None
         try:
             return self._say(kind, title, lines, priority, tags)
@@ -54,34 +65,44 @@ class HookAnnouncor:
 
     def completed(self, delugapi_torrent: DelugapiTorrent, label_handler: TorrentLabelHandlor | None = None, *,
                   browser_source_data: dict | None = None, destination: str | None = None,
-                  refreshed: bool | None = None, not_moved: str | None = None) -> str | None:
+                  refreshed: bool | None = None, not_moved: str | None = None,
+                  already_named: bool = False) -> str | None:
+        """already_named: the torrent arrived in its pattern folder, so no rename was asked for."""
         try:
-            title = self._completed_title(delugapi_torrent, browser_source_data)
-            lines = self._completed_lines(delugapi_torrent, label_handler, destination, refreshed, not_moved)
+            title = f'done: {HumanNamor.human_name(browser_source_data, delugapi_torrent.name)}'
+            outcome_lines = self._completed_outcome_lines(delugapi_torrent.label, label_handler, destination,
+                                                          refreshed, not_moved)
+            detail_lines = self._completed_detail_lines(delugapi_torrent, label_handler, already_named)
         except Exception as exc:  # fail-open: a message that cannot be built is not sent
             return self._fail(f'completed message not built: {exc!r}')
-        tags = (delugapi_torrent.label,) if delugapi_torrent.label else ()
-        lines, tags, priority = self._with_diversions(lines, tags)
-        return self.say('completed', title, lines, priority=priority, tags=tags)
+        tags, priority = self._diverted((delugapi_torrent.label,) if delugapi_torrent.label else ())
+        return self.say('completed', title, [*outcome_lines, *self._diversion_lines, *detail_lines],
+                        priority=priority, tags=tags)
 
-    def removed(self, torrent_name: str, folder: str, outcome: str | None, jellyfin_told: bool | None) -> str | None:
-        """jellyfin_told: True told, False the call failed, None nothing deleted so nothing to tell."""
+    def removed(self, folder: str, outcome: str | None, jellyfin_told: bool | None, *,
+                record: dict | None = None) -> str | None:
+        """record: the click record from the folder's provenance.yml, None when there was none to read.
+        jellyfin_told: True told, False the call failed, None nothing deleted so nothing to tell."""
         try:
-            lines = [f'folder {self._relative_to_video_root(folder)}', f'outcome {outcome or "unknown"}']
+            title = f'removed: {HumanNamor.human_name(record, PurePosixPath(folder).name)}'
+            outcome_line = outcome or 'outcome unknown'
+            if jellyfin_told is not None:
+                outcome_line += ', jellyfin told' if jellyfin_told else ', jellyfin not told: call failed'
+            detail_lines = [f'folder {self._relative_to_video_root(folder)}/']
         except Exception as exc:  # fail-open: a message that cannot be built is not sent
             return self._fail(f'removed message not built: {exc!r}')
-        if jellyfin_told is None:
-            lines.append('jellyfin not told: nothing deleted')
-        else:
-            lines.append('jellyfin told' if jellyfin_told else 'jellyfin not told: call failed')
-        lines, tags, priority = self._with_diversions(lines, ())
-        return self.say('removed', f'removed: {torrent_name}', lines, priority=priority, tags=tags)
+        tags, priority = self._diverted(())
+        return self.say('removed', title, [outcome_line, *self._diversion_lines, *detail_lines],
+                        priority=priority, tags=tags)
 
     def failed(self, stage: str, exc: BaseException, torrent_name: str) -> str | None:
-        lines = [f'at {stage}', f'{type(exc).__name__}: {exc}']
-        lines += [f'! {diversion}' for diversion in self._diversions]
+        try:
+            title = f'failed: {HumanNamor.human_name(self.record, torrent_name)}'
+            lines = [f'at {stage}: {type(exc).__name__}: {str(exc).partition("\n")[0][:200]}', *self._diversion_lines]
+        except Exception as build_exc:  # fail-open: called while the hook dies, it must not replace the death
+            return self._fail(f'failed message not built: {build_exc!r}')
         tags = (self.label,) if self.label else ()
-        return self.say('failed', f'failed: {torrent_name}', lines, priority='high', tags=tags)
+        return self.say('failed', title, lines, priority='high', tags=tags)
 
     # ---
 
@@ -96,7 +117,7 @@ class HookAnnouncor:
             return None
         ntfy_announcor = NtfyAnnouncor()
         message_id = ntfy_announcor.announce(
-            '\n'.join(lines), title=title, tags=(kind, *tags),
+            '\n'.join(lines), title=title, tags=(self.kind_tags.get(kind, kind), *tags),
             priority=PriorityEnum(priority) if priority else None,
         )
         if message_id is None:
@@ -104,55 +125,48 @@ class HookAnnouncor:
         return message_id
 
     @staticmethod
-    def _completed_title(delugapi_torrent: DelugapiTorrent, browser_source_data: dict | None) -> str:
-        # the record names a movie only, as it names the movie folder; a series title would hide the episode
-        record = browser_source_data or {}
-        media_title = record.get('media_title') if record.get('media_type') == 'movie' else None
-        if not media_title:
-            return f'done: {delugapi_torrent.name}'
-        media_year = record.get('media_year')
-        if media_year is None:
-            return f'done: {media_title}'
-        return f'done: {media_title} ({media_year})'
+    def _completed_outcome_lines(label: str | None, label_handler: TorrentLabelHandlor | None,
+                                 destination: str | None, refreshed: bool | None, not_moved: str | None) -> list[str]:
+        if destination:
+            lines = [f'in {HookAnnouncor._relative_to_video_root(destination)}']
+        elif not_moved:
+            lines = [f'not moved: {not_moved}']
+        elif label_handler is None:
+            lines = [f'not moved: no handler for label {label}' if label else 'not moved: no label']
+        else:
+            lines = ['not moved: unknown']
+        lines.append('jellyfin refreshed' if refreshed and label_handler is not None else 'jellyfin not refreshed')
+        return lines
 
     @staticmethod
-    def _completed_lines(delugapi_torrent: DelugapiTorrent, label_handler: TorrentLabelHandlor | None,
-                         destination: str | None, refreshed: bool | None, not_moved: str | None) -> list[str]:
-        label = delugapi_torrent.label
-        lines = [f'label {label}' if label else 'label none']
+    def _completed_detail_lines(delugapi_torrent: DelugapiTorrent, label_handler: TorrentLabelHandlor | None,
+                                already_named: bool) -> list[str]:
+        # the torrent's files as the status read them before any rename, so a single path at the root is a bare file
         paths = [file['path'] for file in delugapi_torrent.files]
-        if label_handler is not None and label_handler.is_renamed:
-            lines.append(f'folder {label_handler.pattern_dir_name}/')
-        elif len(paths) == 1 and '/' not in paths[0]:
-            lines.append('bare file')
+        is_bare = len(paths) == 1 and '/' not in paths[0]
+        # the line names its object: the pattern folder it became, or the release as it came, a folder with its slash
+        if label_handler is not None and already_named:
+            folder_line = f'already {label_handler.pattern_dir_name}/'
+        elif label_handler is not None and label_handler.is_renamed:
+            folder_line = f"{'wrapped into' if is_bare else 'renamed to'} {label_handler.pattern_dir_name}/"
         else:
-            lines.append(f'folder {delugapi_torrent.name}/')
-        if destination:
-            lines.append(f'moved {HookAnnouncor._relative_to_video_root(destination)}')
-        elif not_moved:
-            lines.append(f'not moved: {not_moved}')
-        elif label_handler is None:
-            lines.append(f'not moved: no handler for label {label}' if label else 'not moved: no label')
-        else:
-            lines.append('not moved: unknown')
-        if refreshed and label_handler is not None:
-            lines.append(f'jellyfin {label_handler.jelly_library_name}')
-        else:
-            lines.append('jellyfin none')
-        lines.append(f'size {(delugapi_torrent.total_wanted or 0) / 1e9:.1f} GB')
-        return lines
+            folder_line = f"as released: {HumanNamor.trimmed(delugapi_torrent.name)}{'' if is_bare else '/'}"
+        return [folder_line, f'{(delugapi_torrent.total_wanted or 0) / 1e9:.1f} GB', f'hash {delugapi_torrent.tid}']
 
     @staticmethod
     def _relative_to_video_root(path: str) -> PurePosixPath:
         posix_path = PurePosixPath(path)
         return posix_path.relative_to(video_root_dir) if posix_path.is_relative_to(video_root_dir) else posix_path
 
-    def _with_diversions(self, lines: list[str], tags: tuple[str, ...]) -> tuple[list[str], tuple[str, ...], str | None]:
-        """One `!` line per noted diversion; any of them adds the tag diverted and makes the priority high."""
-        lines = lines + [f'! {diversion}' for diversion in self._diversions]
+    @property
+    def _diversion_lines(self) -> list[str]:
+        return [f'! {diversion}' for diversion in self._diversions]
+
+    def _diverted(self, tags: tuple[str, ...]) -> tuple[tuple[str, ...], str | None]:
+        """Any noted diversion adds the tags warning and diverted and makes the priority high."""
         if not self._diversions:
-            return lines, tags, None
-        return lines, (*tags, 'diverted'), 'high'
+            return tags, None
+        return (*tags, 'warning', 'diverted'), 'high'
 
     def _fail(self, reason: str) -> None:
         self._failure = reason

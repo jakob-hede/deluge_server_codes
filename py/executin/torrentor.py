@@ -260,6 +260,7 @@ class Torrentor:
             announce_destination = None
             announce_refreshed = None
             announce_not_moved = None
+            announce_already_named = False
             transaction = DelugApiStatusTransaction(torrent_id=self.torrent_id)
             reply = yield api_client.api.transactize(transaction)
             # transaction_response = transaction.response
@@ -287,6 +288,7 @@ class Torrentor:
                             f"Survey missing at completed, no torrent file under '{delugapi_torrent.name}' or '{self.torrent_name}'")
                         announcor.note('survey missing, no torrent file to write it from')
                 browser_source_data = self.browser_source_file_read_data()
+                announcor.record = browser_source_data
                 label_handler = TorrentLabelHandlor.factory(
                     label,
                     delugapi_torrent=delugapi_torrent,
@@ -299,6 +301,7 @@ class Torrentor:
                     rename_plan = label_handler.rename_plan
                     if rename_plan is None and label_handler.is_in_pattern_dir:
                         label_handler.is_renamed = True
+                        announce_already_named = True
                         self.logger.info(f'Already in pattern folder "{label_handler.pattern_dir_name}/", no rename')
                     elif rename_plan is not None:
                         if Commons.singleton.is_at_daemon:
@@ -506,7 +509,8 @@ class Torrentor:
                                             browser_source_data=browser_source_data,
                                             destination=announce_destination,
                                             refreshed=announce_refreshed,
-                                            not_moved=announce_not_moved)
+                                            not_moved=announce_not_moved,
+                                            already_named=announce_already_named)
             if announced:
                 self.logger.info(f'Announced {announced}')
 
@@ -586,6 +590,13 @@ class Torrentor:
         self.logger.info(f"Torrent '{self.torrent_name}' has been removed..")
         folder = Path(self.base_sdir) / self.torrent_name
         try:
+            # the click record in the folder's provenance names the message; read before the delete, fail-open
+            try:
+                provenance = yaml.safe_load((folder / 'provenance.yml').read_text())
+                record = provenance.get('click') if isinstance(provenance, dict) else None
+            except Exception:
+                record = None
+            self.announcor.record = record
             jellyfin_told = None
             if self.remove_emptied_folder(folder, TorrentHandlorMovin._destin_dir):
                 # Jellyfin is told the one path, never asked to delete an item, which deletes the files too
@@ -595,7 +606,7 @@ class Torrentor:
                 except Exception as exc:
                     jellyfin_told = False
                     self.announcor.note(f'jellyfin not told: {type(exc).__name__}: {str(exc).partition("\n")[0][:200]}')
-            announced = self.announcor.removed(self.torrent_name, str(folder), self.remove_outcome, jellyfin_told)
+            announced = self.announcor.removed(str(folder), self.remove_outcome, jellyfin_told, record=record)
             if announced:
                 self.logger.info(f'Announced {announced}')
         except Exception as exc:
@@ -643,14 +654,17 @@ class Torrentor:
             sleep(1)
         if videos != []:
             self.logger.info(f"Video still in '{folder}' after {top} rounds, left as a remove without data")
-            self.remove_outcome = f'kept: video still present after {top} rounds'
+            self.remove_outcome = f'kept, video still present after {top} rounds'
             return False
 
         if not folder.exists():
             self.logger.info(f"'{folder}' is gone already, nothing to delete")
             self.remove_outcome = 'gone already'
             return False
-        left = sorted(str(path.relative_to(folder)) for path in folder.rglob('*'))
+        left_paths = list(folder.rglob('*'))
+        left = sorted(str(path.relative_to(folder)) for path in left_paths)
+        # the message counts files, a real directory is not one; a symlink is, rmtree removes it as a link
+        left_file_count = sum(1 for path in left_paths if path.is_symlink() or not path.is_dir())
         self.logger.info(f"Deleting '{folder}' with what is left: {left}")
         try:
             shutil.rmtree(folder)
@@ -660,8 +674,8 @@ class Torrentor:
             self.announcor.note(f"deletion failed, {folder.name}/ left for the operator's hand")
             return False
         self.logger.remark(f"Deleted '{folder}'")
-        self.remove_outcome = f'deleted, {len(left)} leftovers'
-        self.remove_leftovers = len(left)
+        self.remove_outcome = f'deleted with {left_file_count} files'
+        self.remove_leftovers = left_file_count
 
         # a double-wrapped folder's parent is below the library too, it is left for the operator's hand
         parent = folder.parent
