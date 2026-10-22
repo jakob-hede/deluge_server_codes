@@ -64,7 +64,7 @@ class Testor:
 
     def case_outside_library(self):
         folder = self.lay_out(self.base / 'elsewhere' / 'the.florist.2026', self.leftovers)
-        self.judge(folder, False, {folder: True}, f"refused: its download location is outside '{self.library}'")
+        self.judge(folder, False, {folder: True}, f'refused: its download location is outside **{self.library}**')
 
     def case_not_existing(self):
         self.library.mkdir(parents=True, exist_ok=True)
@@ -127,8 +127,8 @@ class Testor:
         torrentor_module.shutil.rmtree = failing_rmtree
         try:
             self.judge(folder, False, {folder: True},
-                       f"error: [Errno 13] Permission denied: '{folder / 'Subs'}'",
-                       diversions=("deletion failed, the.florist.2026/ left for the operator's hand",))
+                       f"error: **[Errno 13] Permission denied: '{folder / 'Subs'}'**",
+                       diversions=("deletion failed, **the.florist.2026/** left for the operator's hand",))
         finally:
             torrentor_module.shutil.rmtree = real_rmtree
 
@@ -136,13 +136,13 @@ class Testor:
         parent = self.library / 'moonrise.kingdom.2012'
         folder = self.lay_out(parent / 'Moonrise Kingdom (2012) Criterion (2160p)', self.leftovers)
         self.judge(folder, True, {folder: False, parent: True}, 'deleted with 7 files', 7,
-                   diversions=("parent moonrise.kingdom.2012/ holds no video, left for the operator's hand",))
+                   diversions=("parent **moonrise.kingdom.2012/** holds no video, left for the operator's hand",))
 
     def case_climbing_path(self):
         self.lay_out(self.library / 'the.florist.2026', self.leftovers)
         (self.base / 'downloads').mkdir()
         folder = self.base / 'downloads' / '..' / 'movin' / 'the.florist.2026'
-        self.judge(folder, False, {self.library / 'the.florist.2026': True}, "refused: its path climbs with '..'")
+        self.judge(folder, False, {self.library / 'the.florist.2026': True}, 'refused: its path climbs with **..**')
 
     def case_inner_symlink_to_outside_video(self):
         outside = self.lay_out(self.base / 'outside', ['other.mkv'])

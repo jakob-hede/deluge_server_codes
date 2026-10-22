@@ -402,7 +402,7 @@ class Torrentor:
                             if pattern_dir is not None and pattern_dir.exists():
                                 self.logger.warning(
                                     f'Pattern folder "{pattern_dir}" already exists, moving anyway, its files are not replaced')
-                                announcor.note(f'pattern folder {pattern_dir.name}/ already existed, its files not replaced')
+                                announcor.note(f'pattern folder {announcor.bold(f"{pattern_dir.name}/")} already existed, its files not replaced')
                             sidecar_dir = label_handler.sidecar_dir
                             if sidecar_dir is not None:
                                 self.logger.info(f"Writing sidecars to '{sidecar_dir}' before the move")
@@ -471,7 +471,7 @@ class Torrentor:
                                     self.jellyfin_refresh(label_handler, destination_sdir)
                                     announce_refreshed = True
                                 except Exception as exc:
-                                    announcor.note(f'jellyfin refresh failed: {type(exc).__name__}: {str(exc).partition("\n")[0][:200]}')
+                                    announcor.note(f'jellyfin refresh failed: {announcor.exception_text(exc)}')
                         else:
                             self.logger.warning(f'Media is NOT in expected location for Jellyfin refresh: '
                                                 f'Expected: "{destination_sdir}"'
@@ -605,7 +605,7 @@ class Torrentor:
                     jellyfin_told = True
                 except Exception as exc:
                     jellyfin_told = False
-                    self.announcor.note(f'jellyfin not told: {type(exc).__name__}: {str(exc).partition("\n")[0][:200]}')
+                    self.announcor.note(f'jellyfin not told: {self.announcor.exception_text(exc)}')
             announced = self.announcor.removed(str(folder), self.remove_outcome, jellyfin_told, record=record)
             if announced:
                 self.logger.info(f'Announced {announced}')
@@ -622,11 +622,11 @@ class Torrentor:
         self.remove_leftovers = None
         library = library_dir.resolve()
         if '..' in folder.parts:
-            return self._refuse_removal(folder, "its path climbs with '..'")
+            return self._refuse_removal(folder, 'its path climbs with {}', '..')
         if folder.resolve() == library:
             return self._refuse_removal(folder, 'it is the library itself')
         if not folder.parent.resolve().is_relative_to(library):
-            return self._refuse_removal(folder, f"its download location is outside '{library_dir}'")
+            return self._refuse_removal(folder, 'its download location is outside {}', library_dir)
         if folder.is_symlink():
             return self._refuse_removal(folder, 'it is a symlink')
         if not folder.exists():
@@ -635,7 +635,7 @@ class Torrentor:
             return self._refuse_removal(folder, 'it is not a directory')
         resolved_folder = folder.resolve()
         if resolved_folder == library or not resolved_folder.is_relative_to(library):
-            return self._refuse_removal(folder, f"it resolves to '{resolved_folder}', not below '{library_dir}'")
+            return self._refuse_removal(folder, 'it resolves to {}, not below {}', resolved_folder, library_dir)
 
         # libtorrent deletes the data in its own thread after the event, so the video may still be going
         video_extensions = TorrentHandlorMovin.video_extensions
@@ -670,8 +670,8 @@ class Torrentor:
             shutil.rmtree(folder)
         except OSError as e:
             self.logger.error(f"Error deleting '{folder}': {e}")
-            self.remove_outcome = f'error: {e}'
-            self.announcor.note(f"deletion failed, {folder.name}/ left for the operator's hand")
+            self.remove_outcome = f'error: {self.announcor.bold(e)}'
+            self.announcor.note(f"deletion failed, {self.announcor.bold(f'{folder.name}/')} left for the operator's hand")
             return False
         self.logger.remark(f"Deleted '{folder}'")
         self.remove_outcome = f'deleted with {left_file_count} files'
@@ -683,12 +683,14 @@ class Torrentor:
             parent_videos = [path for path in parent.rglob('*') if path.suffix.lower() in video_extensions and path.is_file()]
             if not parent_videos:
                 self.logger.warning(f"Parent '{parent}' holds no video, left for the operator's hand")
-                self.announcor.note(f"parent {parent.name}/ holds no video, left for the operator's hand")
+                self.announcor.note(f"parent {self.announcor.bold(f'{parent.name}/')} holds no video, left for the operator's hand")
         return True
 
-    def _refuse_removal(self, folder: Path, reason: str) -> bool:
-        self.logger.info(f"Not removing '{folder}', {reason}")
-        self.remove_outcome = f'refused: {reason}'
+    def _refuse_removal(self, folder: Path, reason: str, *objects: object) -> bool:
+        # each {} of the reason holds an object, quoted in the log as it always was, set in bold in the message
+        log_reason = reason.format(*(f"'{obj}'" for obj in objects))
+        self.logger.info(f"Not removing '{folder}', {log_reason}")
+        self.remove_outcome = f'refused: {reason.format(*(self.announcor.bold(obj) for obj in objects))}'
         return False
 
 

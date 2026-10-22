@@ -110,9 +110,9 @@ class Testor:
             announcor = HookAnnouncor(logger)
             message_id = announcor.completed(florist_torrent, florist_handler, browser_source_data=florist_record,
                                              destination=str(florist_handler.destin_dir), refreshed=True)
-            all_as_expected &= self._check(message_id, captured[-1], 'done: The Florist (2026)',
-                                           ['in movies/movin', 'jellyfin refreshed', 'renamed to the.florist.2026/', '1.9 GB',
-                                            f'hash {infohash}'],
+            all_as_expected &= self._check(message_id, captured[-1], 'COMPLETED: The Florist (2026)',
+                                           ['in **movies/movin**', 'jellyfin refreshed', 'renamed to **the.florist.2026/**', '1.9 GB',
+                                            f'hash **{infohash}**'],
                                            ['white_check_mark', 'movin', 'testor@asusi7'], None)
 
             # ---
@@ -123,18 +123,18 @@ class Testor:
             announcor = HookAnnouncor(logger)
             message_id = announcor.completed(tv_torrent, tv_handler, browser_source_data={},
                                              destination=str(tv_handler.destin_dir), refreshed=True)
-            all_as_expected &= self._check(message_id, captured[-1], 'done: VisionQuest S01E03 1080p x265-ELiTE',
-                                           ['in tv/visionquest/s01', 'jellyfin refreshed', 'as released: VisionQuest S01E03 1080p x265-ELiTE/',
-                                            '0.9 GB', f'hash {infohash}'],
+            all_as_expected &= self._check(message_id, captured[-1], 'COMPLETED: VisionQuest S01E03 1080p x265-ELiTE',
+                                           ['in **tv/visionquest/s01**', 'jellyfin refreshed', 'as released: **VisionQuest S01E03 1080p x265-ELiTE/**',
+                                            '0.9 GB', f'hash **{infohash}**'],
                                            ['white_check_mark', 'tv-in', 'testor@asusi7'], None)
 
             # ---
             print("--- unlabelled torrent")
             announcor = HookAnnouncor(logger)
             message_id = announcor.completed(torrent(iso_name, iso_files, ''))
-            all_as_expected &= self._check(message_id, captured[-1], 'done: debian-13.1.0-amd64-netinst',
-                                           ['not moved: no label', 'jellyfin not refreshed', 'as released: debian-13.1.0-amd64-netinst',
-                                            '0.8 GB', f'hash {infohash}'],
+            all_as_expected &= self._check(message_id, captured[-1], 'COMPLETED: debian-13.1.0-amd64-netinst',
+                                           ['not moved: no label', 'jellyfin not refreshed', 'as released: **debian-13.1.0-amd64-netinst**',
+                                            '0.8 GB', f'hash **{infohash}**'],
                                            ['white_check_mark', 'testor@asusi7'], None)
 
             # ---
@@ -146,9 +146,9 @@ class Testor:
             announcor = HookAnnouncor(logger)
             message_id = announcor.completed(bare_torrent, bare_handler, browser_source_data=florist_record,
                                              not_moved='not at daemon')
-            all_as_expected &= self._check(message_id, captured[-1], 'done: The Florist (2026)',
+            all_as_expected &= self._check(message_id, captured[-1], 'COMPLETED: The Florist (2026)',
                                            ['not moved: not at daemon', 'jellyfin not refreshed',
-                                            'as released: The Florist 2026 1080p WEB-DL HEVC x265 5.1 BONE', '1.5 GB', f'hash {infohash}'],
+                                            'as released: **The Florist 2026 1080p WEB-DL HEVC x265 5.1 BONE**', '1.5 GB', f'hash **{infohash}**'],
                                            ['white_check_mark', 'movin', 'testor@asusi7'], None)
 
             # ---
@@ -162,9 +162,9 @@ class Testor:
             message_id = announcor.completed(named_torrent, named_handler, browser_source_data=florist_record,
                                              destination=str(named_handler.destin_dir), refreshed=True,
                                              already_named=True)
-            all_as_expected &= self._check(message_id, captured[-1], 'done: The Florist (2026)',
-                                           ['in movies/movin', 'jellyfin refreshed', 'already the.florist.2026/',
-                                            '1.9 GB', f'hash {infohash}'],
+            all_as_expected &= self._check(message_id, captured[-1], 'COMPLETED: The Florist (2026)',
+                                           ['in **movies/movin**', 'jellyfin refreshed', 'already **the.florist.2026/**',
+                                            '1.9 GB', f'hash **{infohash}**'],
                                            ['white_check_mark', 'movin', 'testor@asusi7'], None)
 
             # ---
@@ -176,9 +176,9 @@ class Testor:
             announcor = HookAnnouncor(logger)
             message_id = announcor.completed(bare_torrent, wrapped_handler, browser_source_data=florist_record,
                                              destination=str(wrapped_handler.destin_dir), refreshed=True)
-            all_as_expected &= self._check(message_id, captured[-1], 'done: The Florist (2026)',
-                                           ['in movies/movin', 'jellyfin refreshed', 'wrapped into the.florist.2026/',
-                                            '1.5 GB', f'hash {infohash}'],
+            all_as_expected &= self._check(message_id, captured[-1], 'COMPLETED: The Florist (2026)',
+                                           ['in **movies/movin**', 'jellyfin refreshed', 'wrapped into **the.florist.2026/**',
+                                            '1.5 GB', f'hash **{infohash}**'],
                                            ['white_check_mark', 'movin', 'testor@asusi7'], None)
 
             # ---
@@ -191,11 +191,11 @@ class Testor:
             announcor.note('not where expected for the Jellyfin refresh, none asked for')
             message_id = announcor.completed(florist_torrent, diverted_handler, browser_source_data=florist_record,
                                              destination=str(diverted_handler.destin_dir))
-            all_as_expected &= self._check(message_id, captured[-1], 'done: The Florist (2026)',
-                                           ['in movies/movin', 'jellyfin not refreshed',
+            all_as_expected &= self._check(message_id, captured[-1], 'COMPLETED: The Florist (2026)',
+                                           ['in **movies/movin**', 'jellyfin not refreshed',
                                             '! folder rename not reported after 60 rounds, moved as not renamed',
                                             '! not where expected for the Jellyfin refresh, none asked for',
-                                            'as released: The Florist (2026)/', '1.9 GB', f'hash {infohash}'],
+                                            'as released: **The Florist (2026)/**', '1.9 GB', f'hash **{infohash}**'],
                                            ['white_check_mark', 'movin', 'warning', 'diverted', 'testor@asusi7'], 4)
 
             # ---
@@ -204,14 +204,14 @@ class Testor:
             refused_text = f"HTTPConnectionPool(host='10.4.9.11', port=8096): Max retries exceeded {'x' * 200}\nsecond line"
             try:
                 raise requests.ConnectionError(refused_text)
-            except Exception as exc:  # the note as on_completed words it
-                announcor.note(f'jellyfin refresh failed: {type(exc).__name__}: {str(exc).partition("\n")[0][:200]}')
+            except Exception as exc:  # the note as on_completed words it, through the same helper
+                announcor.note(f'jellyfin refresh failed: {announcor.exception_text(exc)}')
             message_id = announcor.completed(florist_torrent, florist_handler, browser_source_data=florist_record,
                                              destination=str(florist_handler.destin_dir))
-            all_as_expected &= self._check(message_id, captured[-1], 'done: The Florist (2026)',
-                                           ['in movies/movin', 'jellyfin not refreshed',
-                                            f'! jellyfin refresh failed: ConnectionError: {refused_text[:200]}',
-                                            'renamed to the.florist.2026/', '1.9 GB', f'hash {infohash}'],
+            all_as_expected &= self._check(message_id, captured[-1], 'COMPLETED: The Florist (2026)',
+                                           ['in **movies/movin**', 'jellyfin not refreshed',
+                                            f'! jellyfin refresh failed: **ConnectionError: {refused_text[:200]}**',
+                                            'renamed to **the.florist.2026/**', '1.9 GB', f'hash **{infohash}**'],
                                            ['white_check_mark', 'movin', 'warning', 'diverted', 'testor@asusi7'], 4)
 
             # ---
@@ -222,8 +222,8 @@ class Testor:
             announcor.note('survey missing, no torrent file to write it from')
             message_id = announcor.failed(announcor.stage, RuntimeError('rename transaction raised on purpose'),
                                           yts_folder)
-            all_as_expected &= self._check(message_id, captured[-1], 'failed: The Florist (2026)',
-                                           ['at rename: RuntimeError: rename transaction raised on purpose',
+            all_as_expected &= self._check(message_id, captured[-1], 'FAILED: The Florist (2026)',
+                                           ['at **rename**: **RuntimeError: rename transaction raised on purpose**',
                                             '! survey missing, no torrent file to write it from'],
                                            ['x', 'movin', 'testor@asusi7'], 4)
 
@@ -232,30 +232,30 @@ class Testor:
             announcor = HookAnnouncor(logger)
             message_id = announcor.removed('/ocean/video/movies/movin/the.florist.2026', 'deleted with 6 files', True,
                                            record=florist_record)
-            all_as_expected &= self._check(message_id, captured[-1], 'removed: The Florist (2026)',
-                                           ['deleted with 6 files, jellyfin told', 'folder movies/movin/the.florist.2026/'],
+            all_as_expected &= self._check(message_id, captured[-1], 'REMOVED: The Florist (2026)',
+                                           ['deleted with 6 files, jellyfin told', 'folder **movies/movin/the.florist.2026/**'],
                                            ['wastebasket', 'testor@asusi7'], None)
 
             # ---
             print("--- removed, refused outside the movie library")
-            refused_outcome = "refused: its download location is outside '/ocean/video/movies/movin'"
+            refused_outcome = 'refused: its download location is outside **/ocean/video/movies/movin**'
             announcor = HookAnnouncor(logger)
             message_id = announcor.removed(f'/ocean/video/tv/visionquest/s01/{tv_name}', refused_outcome, None)
-            all_as_expected &= self._check(message_id, captured[-1], 'removed: VisionQuest S01E03 1080p x265-ELiTE',
-                                           [refused_outcome, f'folder tv/visionquest/s01/{tv_name}/'],
+            all_as_expected &= self._check(message_id, captured[-1], 'REMOVED: VisionQuest S01E03 1080p x265-ELiTE',
+                                           [refused_outcome, f'folder **tv/visionquest/s01/{tv_name}/**'],
                                            ['wastebasket', 'testor@asusi7'], None)
 
             # ---
             print("--- removed, deleted, the double-wrapped parent left for the hand, no provenance")
             moonrise_name = 'Moonrise Kingdom (2012) Criterion (2160p)'
-            parent_diversion = "parent moonrise.kingdom.2012/ holds no video, left for the operator's hand"
+            parent_diversion = "parent **moonrise.kingdom.2012/** holds no video, left for the operator's hand"
             announcor = HookAnnouncor(logger)
             announcor.note(parent_diversion)
             message_id = announcor.removed(f'/ocean/video/movies/movin/moonrise.kingdom.2012/{moonrise_name}',
                                            'deleted with 7 files', True)
-            all_as_expected &= self._check(message_id, captured[-1], f'removed: {moonrise_name}',
+            all_as_expected &= self._check(message_id, captured[-1], f'REMOVED: {moonrise_name}',
                                            ['deleted with 7 files, jellyfin told', f'! {parent_diversion}',
-                                            f'folder movies/movin/moonrise.kingdom.2012/{moonrise_name}/'],
+                                            f'folder **movies/movin/moonrise.kingdom.2012/{moonrise_name}/**'],
                                            ['wastebasket', 'warning', 'diverted', 'testor@asusi7'], 4)
 
             # ---
@@ -263,14 +263,14 @@ class Testor:
             announcor = HookAnnouncor(logger)
             try:
                 raise requests.ConnectionError('refused on purpose')
-            except Exception as exc:  # the note as on_removed words it
-                announcor.note(f'jellyfin not told: {type(exc).__name__}: {str(exc).partition("\n")[0][:200]}')
+            except Exception as exc:  # the note as on_removed words it, through the same helper
+                announcor.note(f'jellyfin not told: {announcor.exception_text(exc)}')
             message_id = announcor.removed('/ocean/video/movies/movin/the.florist.2026', 'deleted with 6 files', False,
                                            record=florist_record)
-            all_as_expected &= self._check(message_id, captured[-1], 'removed: The Florist (2026)',
+            all_as_expected &= self._check(message_id, captured[-1], 'REMOVED: The Florist (2026)',
                                            ['deleted with 6 files, jellyfin not told: call failed',
-                                            '! jellyfin not told: ConnectionError: refused on purpose',
-                                            'folder movies/movin/the.florist.2026/'],
+                                            '! jellyfin not told: **ConnectionError: refused on purpose**',
+                                            'folder **movies/movin/the.florist.2026/**'],
                                            ['wastebasket', 'warning', 'diverted', 'testor@asusi7'], 4)
         finally:
             NtfyClient._request = original_request
@@ -291,7 +291,8 @@ class Testor:
         print(f"title: {payload.get('title')!r}")
         for line in payload['message'].split('\n'):
             print(f"  | {line}")
-        print(f"tags: {payload.get('tags')}  priority: {payload.get('priority')}  click: {payload.get('click')}")
+        print(f"tags: {payload.get('tags')}  priority: {payload.get('priority')}  click: {payload.get('click')}"
+              f"  markdown: {payload.get('markdown')}")
         is_as_expected = (
             message_id is not None
             and payload.get('title') == title
@@ -299,6 +300,7 @@ class Testor:
             and payload.get('tags') == tags
             and payload.get('priority') == priority
             and 'click' not in payload
+            and payload.get('markdown') is True
         )
         print(f"as expected: {is_as_expected}")
         return is_as_expected
