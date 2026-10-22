@@ -40,6 +40,13 @@ class JellyfinCommunicator:
         except Exception as exc:
             self.logger.warning(f"toast skipped: {type(exc).__name__}: {exc}")
 
+    def report_media_deleted(self, path: str) -> None:
+        """Tell Jellyfin a path in a library is gone; never the item delete endpoint, which deletes the files too."""
+        self._request("POST", "/Library/Media/Updated", json={
+            "Updates": [{"Path": path, "UpdateType": "Deleted"}],
+        })
+        self.logger.info(f"Jellyfin told of media deleted: '{path}'")
+
     def notify_clients_refresh(self, library_name: str, title: str = '') -> None:
         """Send a toast message to all active Jellyfin sessions."""
         response = self._request("GET", "/Sessions")

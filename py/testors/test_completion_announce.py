@@ -175,6 +175,54 @@ class Testor:
                                            ['at rename', 'RuntimeError: rename transaction raised on purpose',
                                             '! survey missing, no torrent file to write it from'],
                                            ['failed', 'movin', 'testor@asusi7'], 4)
+
+            # ---
+            print("--- removed, deleted and told to Jellyfin")
+            announcor = HookAnnouncor(logger)
+            message_id = announcor.removed('the.florist.2026', '/ocean/video/movies/movin/the.florist.2026',
+                                           'deleted, 6 leftovers', True)
+            all_as_expected &= self._check(message_id, captured[-1], 'removed: the.florist.2026',
+                                           ['folder movies/movin/the.florist.2026', 'outcome deleted, 6 leftovers',
+                                            'jellyfin told'],
+                                           ['removed', 'testor@asusi7'], None)
+
+            # ---
+            print("--- removed, refused outside the movie library")
+            refused_outcome = "refused: its download location is outside '/ocean/video/movies/movin'"
+            announcor = HookAnnouncor(logger)
+            message_id = announcor.removed(tv_name, f'/ocean/video/tv/visionquest/s01/{tv_name}', refused_outcome, None)
+            all_as_expected &= self._check(message_id, captured[-1], f'removed: {tv_name}',
+                                           [f'folder tv/visionquest/s01/{tv_name}', f'outcome {refused_outcome}',
+                                            'jellyfin not told: nothing deleted'],
+                                           ['removed', 'testor@asusi7'], None)
+
+            # ---
+            print("--- removed, deleted, the double-wrapped parent left for the hand")
+            moonrise_name = 'Moonrise Kingdom (2012) Criterion (2160p)'
+            parent_diversion = "parent moonrise.kingdom.2012/ holds no video, left for the operator's hand"
+            announcor = HookAnnouncor(logger)
+            announcor.note(parent_diversion)
+            message_id = announcor.removed(moonrise_name, f'/ocean/video/movies/movin/moonrise.kingdom.2012/{moonrise_name}',
+                                           'deleted, 8 leftovers', True)
+            all_as_expected &= self._check(message_id, captured[-1], f'removed: {moonrise_name}',
+                                           [f'folder movies/movin/moonrise.kingdom.2012/{moonrise_name}',
+                                            'outcome deleted, 8 leftovers', 'jellyfin told', f'! {parent_diversion}'],
+                                           ['removed', 'diverted', 'testor@asusi7'], 4)
+
+            # ---
+            print("--- removed, deleted, the Jellyfin call raised")
+            announcor = HookAnnouncor(logger)
+            try:
+                raise requests.ConnectionError('refused on purpose')
+            except Exception as exc:  # the note as on_removed words it
+                announcor.note(f'jellyfin not told: {type(exc).__name__}: {str(exc).partition("\n")[0][:200]}')
+            message_id = announcor.removed('the.florist.2026', '/ocean/video/movies/movin/the.florist.2026',
+                                           'deleted, 6 leftovers', False)
+            all_as_expected &= self._check(message_id, captured[-1], 'removed: the.florist.2026',
+                                           ['folder movies/movin/the.florist.2026', 'outcome deleted, 6 leftovers',
+                                            'jellyfin not told: call failed',
+                                            '! jellyfin not told: ConnectionError: refused on purpose'],
+                                           ['removed', 'diverted', 'testor@asusi7'], 4)
         finally:
             NtfyClient._request = original_request
 

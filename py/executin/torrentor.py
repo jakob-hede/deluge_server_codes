@@ -41,6 +41,10 @@ class Torrentor:
         self.base_sdir: str = base_sdir
         self.logger = DelugapiTorrentorLoggor()
         self.reaction_response: DelugApiResponse = None
+        self.announcor = HookAnnouncor(self.logger)  # the one voice of whichever hook this process runs
+        # the removed hook's outcome, kept at every exit of remove_emptied_folder for its message
+        self.remove_outcome: str | None = None
+        self.remove_leftovers: int | None = None
 
     def process_event(self, event_name):
         print(f"Processing event '{event_name}' for torrent '{self.torrent_name}' ({self.torrent_id})")
@@ -245,7 +249,7 @@ class Torrentor:
         # from delugapi.torrent import DelugapiTorrent
 
         api_client: DelugapiClient = Commons.singleton.api_client
-        announcor = HookAnnouncor(self.logger)
+        announcor = self.announcor
 
         @defer.inlineCallbacks
         def reactize() -> deferred_response:
@@ -581,34 +585,46 @@ class Torrentor:
     def on_removed(self):
         self.logger.info(f"Torrent '{self.torrent_name}' has been removed..")
         folder = Path(self.base_sdir) / self.torrent_name
-        self.remove_emptied_folder(folder, TorrentHandlorMovin._destin_dir)
+        try:
+            jellyfin_told = None
+            if self.remove_emptied_folder(folder, TorrentHandlorMovin._destin_dir):
+                # Jellyfin is told the one path, never asked to delete an item, which deletes the files too
+                try:
+                    JellyfinCommunicator().report_media_deleted(str(folder))
+                    jellyfin_told = True
+                except Exception as exc:
+                    jellyfin_told = False
+                    self.announcor.note(f'jellyfin not told: {type(exc).__name__}: {str(exc).partition("\n")[0][:200]}')
+            announced = self.announcor.removed(self.torrent_name, str(folder), self.remove_outcome, jellyfin_told)
+            if announced:
+                self.logger.info(f'Announced {announced}')
+        except Exception as exc:
+            # the removed hook runs outside twisted, so it dies here: announced, and raised on as it was
+            self.announcor.failed('removed', exc, self.torrent_name)
+            raise
 
     def remove_emptied_folder(self, folder: Path, library_dir: Path, top: int = 60) -> bool:
         # a remove with data deletes only the torrent's own files, so the folder keeps what Jellyfin and the
         # sidecars put there; it goes once no video is left in it, and never anything outside the library
+        # every exit keeps its outcome, in the words of its log line, for the removed message
+        self.remove_outcome = None
+        self.remove_leftovers = None
         library = library_dir.resolve()
         if '..' in folder.parts:
-            self.logger.info(f"Not removing '{folder}', its path climbs with '..'")
-            return False
+            return self._refuse_removal(folder, "its path climbs with '..'")
         if folder.resolve() == library:
-            self.logger.info(f"Not removing '{folder}', it is the library itself")
-            return False
+            return self._refuse_removal(folder, 'it is the library itself')
         if not folder.parent.resolve().is_relative_to(library):
-            self.logger.info(f"Not removing '{folder}', its download location is outside '{library_dir}'")
-            return False
+            return self._refuse_removal(folder, f"its download location is outside '{library_dir}'")
         if folder.is_symlink():
-            self.logger.info(f"Not removing '{folder}', it is a symlink")
-            return False
+            return self._refuse_removal(folder, 'it is a symlink')
         if not folder.exists():
-            self.logger.info(f"Not removing '{folder}', it does not exist")
-            return False
+            return self._refuse_removal(folder, 'it does not exist')
         if not folder.is_dir():
-            self.logger.info(f"Not removing '{folder}', it is not a directory")
-            return False
+            return self._refuse_removal(folder, 'it is not a directory')
         resolved_folder = folder.resolve()
         if resolved_folder == library or not resolved_folder.is_relative_to(library):
-            self.logger.info(f"Not removing '{folder}', it resolves to '{resolved_folder}', not below '{library_dir}'")
-            return False
+            return self._refuse_removal(folder, f"it resolves to '{resolved_folder}', not below '{library_dir}'")
 
         # libtorrent deletes the data in its own thread after the event, so the video may still be going
         video_extensions = TorrentHandlorMovin.video_extensions
@@ -627,10 +643,12 @@ class Torrentor:
             sleep(1)
         if videos != []:
             self.logger.info(f"Video still in '{folder}' after {top} rounds, left as a remove without data")
+            self.remove_outcome = f'kept: video still present after {top} rounds'
             return False
 
         if not folder.exists():
             self.logger.info(f"'{folder}' is gone already, nothing to delete")
+            self.remove_outcome = 'gone already'
             return False
         left = sorted(str(path.relative_to(folder)) for path in folder.rglob('*'))
         self.logger.info(f"Deleting '{folder}' with what is left: {left}")
@@ -638,8 +656,12 @@ class Torrentor:
             shutil.rmtree(folder)
         except OSError as e:
             self.logger.error(f"Error deleting '{folder}': {e}")
+            self.remove_outcome = f'error: {e}'
+            self.announcor.note(f"deletion failed, {folder.name}/ left for the operator's hand")
             return False
         self.logger.remark(f"Deleted '{folder}'")
+        self.remove_outcome = f'deleted, {len(left)} leftovers'
+        self.remove_leftovers = len(left)
 
         # a double-wrapped folder's parent is below the library too, it is left for the operator's hand
         parent = folder.parent
@@ -647,6 +669,12 @@ class Torrentor:
             parent_videos = [path for path in parent.rglob('*') if path.suffix.lower() in video_extensions and path.is_file()]
             if not parent_videos:
                 self.logger.warning(f"Parent '{parent}' holds no video, left for the operator's hand")
+                self.announcor.note(f"parent {parent.name}/ holds no video, left for the operator's hand")
         return True
+
+    def _refuse_removal(self, folder: Path, reason: str) -> bool:
+        self.logger.info(f"Not removing '{folder}', {reason}")
+        self.remove_outcome = f'refused: {reason}'
+        return False
 
 

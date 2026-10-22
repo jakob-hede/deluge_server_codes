@@ -1,4 +1,4 @@
-"""The hook's voice over ntfy: one message per completed event, one more only when the hook dies.
+"""The hook's voice over ntfy: one message per completed or removed event, one more only when the hook dies.
 
 Speaks through the ntfying package of the ntfy_client clone, which testors/import_helpor.py puts on
 sys.path (nested at /codes/ntfy_client on media-docker, the sibling clone on the dev box). Fail-open:
@@ -60,13 +60,22 @@ class HookAnnouncor:
             lines = self._completed_lines(delugapi_torrent, label_handler, destination, refreshed, not_moved)
         except Exception as exc:  # fail-open: a message that cannot be built is not sent
             return self._fail(f'completed message not built: {exc!r}')
-        lines += [f'! {diversion}' for diversion in self._diversions]
         tags = (delugapi_torrent.label,) if delugapi_torrent.label else ()
-        priority = None
-        if self._diversions:
-            tags += ('diverted',)
-            priority = 'high'
+        lines, tags, priority = self._with_diversions(lines, tags)
         return self.say('completed', title, lines, priority=priority, tags=tags)
+
+    def removed(self, torrent_name: str, folder: str, outcome: str | None, jellyfin_told: bool | None) -> str | None:
+        """jellyfin_told: True told, False the call failed, None nothing deleted so nothing to tell."""
+        try:
+            lines = [f'folder {self._relative_to_video_root(folder)}', f'outcome {outcome or "unknown"}']
+        except Exception as exc:  # fail-open: a message that cannot be built is not sent
+            return self._fail(f'removed message not built: {exc!r}')
+        if jellyfin_told is None:
+            lines.append('jellyfin not told: nothing deleted')
+        else:
+            lines.append('jellyfin told' if jellyfin_told else 'jellyfin not told: call failed')
+        lines, tags, priority = self._with_diversions(lines, ())
+        return self.say('removed', f'removed: {torrent_name}', lines, priority=priority, tags=tags)
 
     def failed(self, stage: str, exc: BaseException, torrent_name: str) -> str | None:
         lines = [f'at {stage}', f'{type(exc).__name__}: {exc}']
@@ -119,10 +128,7 @@ class HookAnnouncor:
         else:
             lines.append(f'folder {delugapi_torrent.name}/')
         if destination:
-            destination_path = PurePosixPath(destination)
-            if destination_path.is_relative_to(video_root_dir):
-                destination_path = destination_path.relative_to(video_root_dir)
-            lines.append(f'moved {destination_path}')
+            lines.append(f'moved {HookAnnouncor._relative_to_video_root(destination)}')
         elif not_moved:
             lines.append(f'not moved: {not_moved}')
         elif label_handler is None:
@@ -135,6 +141,18 @@ class HookAnnouncor:
             lines.append('jellyfin none')
         lines.append(f'size {(delugapi_torrent.total_wanted or 0) / 1e9:.1f} GB')
         return lines
+
+    @staticmethod
+    def _relative_to_video_root(path: str) -> PurePosixPath:
+        posix_path = PurePosixPath(path)
+        return posix_path.relative_to(video_root_dir) if posix_path.is_relative_to(video_root_dir) else posix_path
+
+    def _with_diversions(self, lines: list[str], tags: tuple[str, ...]) -> tuple[list[str], tuple[str, ...], str | None]:
+        """One `!` line per noted diversion; any of them adds the tag diverted and makes the priority high."""
+        lines = lines + [f'! {diversion}' for diversion in self._diversions]
+        if not self._diversions:
+            return lines, tags, None
+        return lines, (*tags, 'diverted'), 'high'
 
     def _fail(self, reason: str) -> None:
         self._failure = reason
