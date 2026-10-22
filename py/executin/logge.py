@@ -184,6 +184,10 @@ class ExecutorLoggor(Loggor):
         super().__init__(self.moniker, level=DEBUG)
 
 
+class OceanorLoggor(Loggor):
+    moniker = 'oceanor'
+
+
 class StatusorLoggor(Loggor):
     moniker = 'statusor'
 

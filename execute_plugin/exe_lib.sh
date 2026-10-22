@@ -1,4 +1,4 @@
-D#!/usr/bin/env bash
+#!/usr/bin/env bash
 
 #DELUXE_LOG_FILE='/deluge/log/execute_plugin.log'
 #DELUXE_LOG_FILE='/var/log/deluge/exe.log'

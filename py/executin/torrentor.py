@@ -54,7 +54,8 @@ class Torrentor:
         elif event_name == 'exe_completed':
             return self.on_completed()
         elif event_name == 'exe_removed':
-            self.on_removed()
+            # self.on_removed()
+            return self.on_dummy_removed()
         else:
             print(f"Unknown event: {event_name}")
 
@@ -585,6 +586,10 @@ class Torrentor:
     #     # req = Request('http://<host>:8096/Library/Refresh', method='POST')
     #     # req.add_header('Authorization', 'MediaBrowser Token="<api_key>"')
     #     # urlopen(req)
+
+    def on_dummy_removed(self):
+        self.logger.info(f"Torrent '{self.torrent_name}' has been DUMMY removed..")
+        return True
 
     def on_removed(self):
         self.logger.info(f"Torrent '{self.torrent_name}' has been removed..")
