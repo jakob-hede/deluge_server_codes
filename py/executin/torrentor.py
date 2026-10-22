@@ -5,6 +5,7 @@ import shutil
 import yaml
 from twisted.internet.defer import Deferred
 
+from .announcor import HookAnnouncor
 from .commons import Commons
 from .jellyfin_communicator import JellyfinCommunicator
 from .logge import DelugapiTorrentorLoggor
@@ -244,10 +245,17 @@ class Torrentor:
         # from delugapi.torrent import DelugapiTorrent
 
         api_client: DelugapiClient = Commons.singleton.api_client
+        announcor = HookAnnouncor(self.logger)
 
         @defer.inlineCallbacks
         def reactize() -> deferred_response:
             print('reactize')
+            # carried to the announce at the end, each set where its branch knows it
+            label_handler = None
+            browser_source_data = None
+            announce_destination = None
+            announce_refreshed = None
+            announce_not_moved = None
             transaction = DelugApiStatusTransaction(torrent_id=self.torrent_id)
             reply = yield api_client.api.transactize(transaction)
             # transaction_response = transaction.response
@@ -259,8 +267,10 @@ class Torrentor:
             self.logger.remark(transaction.pressence)
 
             label = delugapi_torrent.label
+            announcor.label = label
             if label:
                 print(f' - label: "{label}"')
+                announcor.stage = 'survey'
                 survey_data = self.survey_file_read_data()
                 if not survey_data:
                     # the added event found no copy of the torrent, at completion the metadata is certain
@@ -271,6 +281,7 @@ class Torrentor:
                     else:
                         self.logger.warning(
                             f"Survey missing at completed, no torrent file under '{delugapi_torrent.name}' or '{self.torrent_name}'")
+                        announcor.note('survey missing, no torrent file to write it from')
                 browser_source_data = self.browser_source_file_read_data()
                 label_handler = TorrentLabelHandlor.factory(
                     label,
@@ -280,6 +291,7 @@ class Torrentor:
                 )
                 if label_handler:
                     torrent_id = delugapi_torrent.tid
+                    announcor.stage = 'rename'
                     rename_plan = label_handler.rename_plan
                     if rename_plan is None and label_handler.is_in_pattern_dir:
                         label_handler.is_renamed = True
@@ -302,6 +314,7 @@ class Torrentor:
                             print(f"transaction_response: {transaction_response}")
                             if transaction_response.error:
                                 self.logger.error(f"Error renaming, moving as not renamed: {transaction_response.error}")
+                                announcor.note('folder rename failed, moved as not renamed')
                             else:
                                 self.logger.remark(
                                     f"Dispatched renaming {delugapi_torrent.name} to '{new_folder}', {str(transaction_response).strip()}")
@@ -321,8 +334,10 @@ class Torrentor:
                                     sleep(1)
                                 if not label_handler.is_renamed:
                                     self.logger.warning(f'Rename not reported after {top} rounds, moving as not renamed')
+                                    announcor.note(f'folder rename not reported after {top} rounds, moved as not renamed')
                         else:
                             self.logger.warning('Not at daemon, skipping rename')
+                    announcor.stage = 'file renames'
                     # the files are renamed only inside a confirmed pattern folder, a failed folder rename nests as before
                     if label_handler.is_renamed:
                         if Commons.singleton.is_at_daemon:
@@ -336,6 +351,7 @@ class Torrentor:
                                 print(f"transaction_response: {transaction_response}")
                                 if transaction_response.error:
                                     self.logger.warning(f"Error renaming files, moving as named: {transaction_response.error}")
+                                    announcor.note('file renames failed, moved as named')
                                 else:
                                     self.logger.remark(
                                         f"Dispatched renaming {len(file_plan)} files, {str(transaction_response).strip()}")
@@ -359,8 +375,10 @@ class Torrentor:
                                         if updated_torrent:
                                             label_handler.current_files = updated_torrent.files
                                         self.logger.warning(f'File renames not reported after {top} rounds, moving as named')
+                                        announcor.note(f'file renames not reported after {top} rounds, moved as named')
                         else:
                             self.logger.warning('Not at daemon, skipping file renames')
+                    announcor.stage = 'move'
                     destination_dir = label_handler.destin_dir
                     origin_dir = delugapi_torrent.download_location
                     destination_sdir = str(destination_dir)
@@ -377,10 +395,13 @@ class Torrentor:
                             if pattern_dir is not None and pattern_dir.exists():
                                 self.logger.warning(
                                     f'Pattern folder "{pattern_dir}" already exists, moving anyway, its files are not replaced')
+                                announcor.note(f'pattern folder {pattern_dir.name}/ already existed, its files not replaced')
                             sidecar_dir = label_handler.sidecar_dir
                             if sidecar_dir is not None:
                                 self.logger.info(f"Writing sidecars to '{sidecar_dir}' before the move")
-                                label_handler.write_sidecars(sidecar_dir)
+                                sidecar_paths = label_handler.write_sidecars(sidecar_dir)
+                                if not sidecar_paths:
+                                    announcor.note('no sidecar written')
                             if not destination_dir.is_dir():
                                 destination_dir.mkdir(parents=True, exist_ok=True)
                             transaction = DelugApiMoveTransaction(torrent_id=torrent_id,
@@ -409,12 +430,19 @@ class Torrentor:
                                 self.logger.info(f"Current download location: '{current_sdir}'")
                                 if current_sdir == destination_sdir:
                                     self.logger.info("Move completed successfully!")
+                                    announce_destination = destination_sdir
                                     break
                                 sleep(1)
+                            if current_sdir != destination_sdir:
+                                announcor.note(f'move not reported after {top - 1} rounds')
+                                announce_not_moved = 'move not confirmed'
                         else:
                             self.logger.warning('Not at daemon, skipping move')
+                            announce_not_moved = 'not at daemon'
                     else:
                         self.logger.warning('Destination is the same as current move_completed_path, skipping move')
+                        announce_not_moved = 'already at the destination'
+                    announcor.stage = 'refresh'
                     if label_handler.is_jellyable:
                         self.logger.exclaim(f'jellyfin_refresh: {destination_sdir}')
 
@@ -433,10 +461,12 @@ class Torrentor:
                             if dev_mode or Commons.singleton.is_at_daemon:
                                 self.logger.info(f'jellyfin_refresh At daemon!  {destination_sdir}')
                                 self.jellyfin_refresh(label_handler, destination_sdir)
+                                announce_refreshed = True
                         else:
                             self.logger.warning(f'Media is NOT in expected location for Jellyfin refresh: '
                                                 f'Expected: "{destination_sdir}"'
                                                 f'Current: "{current_sdir}"')
+                            announcor.note('not where expected for the Jellyfin refresh, none asked for')
 
                         # sleep(5)  # wait for file move to complete
                         # # self.logger.info(f'label            "{label}"')
@@ -465,6 +495,14 @@ class Torrentor:
                         # pass
                         # self.jellyfin_refresh(label, destination_str)
 
+            announced = announcor.completed(delugapi_torrent, label_handler,
+                                            browser_source_data=browser_source_data,
+                                            destination=announce_destination,
+                                            refreshed=announce_refreshed,
+                                            not_moved=announce_not_moved)
+            if announced:
+                self.logger.info(f'Announced {announced}')
+
             self.reaction_response.result = transaction.response.result
             self.reaction_response.error = transaction.response.error
 
@@ -474,8 +512,19 @@ class Torrentor:
             # Reactor lifecycle is managed by delugapi_wrap / Twistor — do NOT stop here
             return reply
 
+        @defer.inlineCallbacks
+        def announced_reactize() -> deferred_response:
+            # the one place the completed hook dies: the twistor catches whatever reactize raises,
+            # so the failure is announced here and raised on, the outcome as it was
+            try:
+                reply = yield reactize()
+            except Exception as exc:
+                announcor.failed(announcor.stage, exc, self.torrent_name)
+                raise
+            return reply
+
         self.reaction_response = DelugApiResponse()
-        d = DelugApi.delugapi_wrap(reactize)
+        d = DelugApi.delugapi_wrap(announced_reactize)
         if d is not None:
             print(f"on_completed: Deferred pending (reactor already running)")
         else:

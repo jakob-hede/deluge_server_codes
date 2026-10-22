@@ -174,4 +174,9 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 
+# ---> ntfy_client
+#  The ntfying package's own repo, cloned nested here on media-docker so the container sees it
+#  under /codes; the dev box keeps its clone beside this one instead.
+/ntfy_client/
+
 
