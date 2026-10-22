@@ -1,5 +1,6 @@
 from pathlib import Path
 from time import sleep
+import shutil
 
 import yaml
 from twisted.internet.defer import Deferred
@@ -7,7 +8,7 @@ from twisted.internet.defer import Deferred
 from .commons import Commons
 from .jellyfin_communicator import JellyfinCommunicator
 from .logge import DelugapiTorrentorLoggor
-from .torrenthandlor import TorrentLabelHandlor
+from .torrenthandlor import TorrentLabelHandlor, TorrentHandlorMovin
 from .torrentparsor import TorrentParsor
 
 from delugapi.response import DelugApiResponse
@@ -527,5 +528,73 @@ class Torrentor:
 
     def on_removed(self):
         self.logger.info(f"Torrent '{self.torrent_name}' has been removed..")
+        folder = Path(self.base_sdir) / self.torrent_name
+        self.remove_emptied_folder(folder, TorrentHandlorMovin._destin_dir)
+
+    def remove_emptied_folder(self, folder: Path, library_dir: Path, top: int = 60) -> bool:
+        # a remove with data deletes only the torrent's own files, so the folder keeps what Jellyfin and the
+        # sidecars put there; it goes once no video is left in it, and never anything outside the library
+        library = library_dir.resolve()
+        if '..' in folder.parts:
+            self.logger.info(f"Not removing '{folder}', its path climbs with '..'")
+            return False
+        if folder.resolve() == library:
+            self.logger.info(f"Not removing '{folder}', it is the library itself")
+            return False
+        if not folder.parent.resolve().is_relative_to(library):
+            self.logger.info(f"Not removing '{folder}', its download location is outside '{library_dir}'")
+            return False
+        if folder.is_symlink():
+            self.logger.info(f"Not removing '{folder}', it is a symlink")
+            return False
+        if not folder.exists():
+            self.logger.info(f"Not removing '{folder}', it does not exist")
+            return False
+        if not folder.is_dir():
+            self.logger.info(f"Not removing '{folder}', it is not a directory")
+            return False
+        resolved_folder = folder.resolve()
+        if resolved_folder == library or not resolved_folder.is_relative_to(library):
+            self.logger.info(f"Not removing '{folder}', it resolves to '{resolved_folder}', not below '{library_dir}'")
+            return False
+
+        # libtorrent deletes the data in its own thread after the event, so the video may still be going
+        video_extensions = TorrentHandlorMovin.video_extensions
+        videos: list[Path] | None = None
+        for i in range(1, top + 1):
+            try:
+                videos = [path for path in folder.rglob('*') if path.suffix.lower() in video_extensions and path.is_file()]
+            except OSError:
+                videos = None
+            if videos == []:
+                self.logger.info(f"No video left in '{folder}' ({i}/{top})")
+                break
+            if i == 1 or i % 10 == 0:
+                videos_text = 'scan interrupted' if videos is None else f"{len(videos)} video, first '{videos[0].relative_to(folder)}'"
+                self.logger.info(f"Waiting for the video to go... ({i}/{top}) {videos_text}")
+            sleep(1)
+        if videos != []:
+            self.logger.info(f"Video still in '{folder}' after {top} rounds, left as a remove without data")
+            return False
+
+        if not folder.exists():
+            self.logger.info(f"'{folder}' is gone already, nothing to delete")
+            return False
+        left = sorted(str(path.relative_to(folder)) for path in folder.rglob('*'))
+        self.logger.info(f"Deleting '{folder}' with what is left: {left}")
+        try:
+            shutil.rmtree(folder)
+        except OSError as e:
+            self.logger.error(f"Error deleting '{folder}': {e}")
+            return False
+        self.logger.remark(f"Deleted '{folder}'")
+
+        # a double-wrapped folder's parent is below the library too, it is left for the operator's hand
+        parent = folder.parent
+        if parent.resolve() != library:
+            parent_videos = [path for path in parent.rglob('*') if path.suffix.lower() in video_extensions and path.is_file()]
+            if not parent_videos:
+                self.logger.warning(f"Parent '{parent}' holds no video, left for the operator's hand")
+        return True
 
 
