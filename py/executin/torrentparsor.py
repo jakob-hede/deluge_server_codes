@@ -113,7 +113,8 @@ class TorrentParsor:
 
     def get_structure_type(self) -> TorrentStructureType:
         """Analyze and return the torrent structure type"""
-        if self.num_files == 1:
+        # A one-file torrent inside a root folder is a single directory, analyzed below
+        if self.num_files == 1 and len(Path(self.files.file_path(0)).parts) == 1:
             return TorrentStructureType.SINGLE_FILE
 
         # Analyze multi-file structure
