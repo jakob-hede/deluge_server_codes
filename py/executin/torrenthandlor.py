@@ -379,7 +379,6 @@ class TorrentHandlorMovin(TorrentLabelHandlor):
         media_type = browser_source_data.get('media_type') if browser_source_data else None
         media_title = browser_source_data.get('media_title') if browser_source_data else None
         has_id = bool(browser_source_data.get('imdb_id') or browser_source_data.get('tmdb_id')) if browser_source_data else False
-        ships_own_nfo = any(Path(file['path']).name == 'movie.nfo' for file in self.latest_files)
         sidecar_files = {'provenance.yml': self.provenance_yml}
         if not browser_source_data:
             self.logger.info(f"Sidecars {list(sidecar_files)}, no movie.nfo, no browser-source record")
@@ -389,8 +388,6 @@ class TorrentHandlorMovin(TorrentLabelHandlor):
             self.logger.info(f"Sidecars {list(sidecar_files)}, no movie.nfo, browser-source record has no media_title")
         elif not has_id:
             self.logger.info(f"Sidecars {list(sidecar_files)}, no movie.nfo, browser-source record has no imdb_id or tmdb_id")
-        elif ships_own_nfo:
-            self.logger.info(f"Sidecars {list(sidecar_files)}, no movie.nfo, the torrent ships its own")
         else:
             sidecar_files['movie.nfo'] = self.movie_nfo
             self.logger.info(f"Sidecars {list(sidecar_files)}")

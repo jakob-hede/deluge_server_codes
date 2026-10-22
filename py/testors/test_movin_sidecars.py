@@ -25,6 +25,8 @@ class Testor:
         name_rule_renamed_files = [{**file, 'path': file['path'].replace(yts_folder, 'the.florist', 1)} for file in yts_files]
         own_nfo_files = yts_files + [{'index': 3, 'path': f'{yts_folder}/movie.nfo', 'size': 4096}]
         own_nfo_renamed_files = [{**file, 'path': file['path'].replace(yts_folder, 'the.florist.2026', 1)} for file in own_nfo_files]
+        nested_nfo_files = yts_files + [{'index': 3, 'path': f'{yts_folder}/Extras/movie.nfo', 'size': 4096}]
+        nested_nfo_renamed_files = [{**file, 'path': file['path'].replace(yts_folder, 'the.florist.2026', 1)} for file in nested_nfo_files]
         moonrise_folder = 'Moonrise Kingdom (2012) Criterion (...)'
         moonrise_files = [
             {'index': 0, 'path': f'{moonrise_folder}/Moonrise.Kingdom.en.srt', 'size': 98304},
@@ -106,8 +108,12 @@ class Testor:
              survey('multiple_directories'), florist_record, f'{movin_dir}/the.florist.2026/{yts_folder}/cd1', florist_nfo),
             ('no files', yts_folder, [], [], None, False,
              survey('single_directory'), florist_record, None, florist_nfo),
-            ('the torrent ships its own movie.nfo', yts_folder, own_nfo_files, own_nfo_files, own_nfo_renamed_files, True,
-             survey('single_directory'), florist_record, f'{movin_dir}/the.florist.2026', None),
+            ('the torrent ships its own movie.nfo at the root, the nfo written anyway', yts_folder, own_nfo_files,
+             own_nfo_files, own_nfo_renamed_files, True,
+             survey('single_directory'), florist_record, f'{movin_dir}/the.florist.2026', florist_nfo),
+            ('the torrent ships a movie.nfo in a subfolder, the nfo written', yts_folder, nested_nfo_files,
+             nested_nfo_files, nested_nfo_renamed_files, True,
+             survey('single_directory'), florist_record, f'{movin_dir}/the.florist.2026', florist_nfo),
         ]
         all_as_expected = True
         for (case_name, name, files, orig_files, current_files, is_renamed, survey_data, browser_source_data,
