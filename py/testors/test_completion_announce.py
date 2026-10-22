@@ -228,49 +228,52 @@ class Testor:
                                            ['x', 'movin', 'testor@asusi7'], 4)
 
             # ---
-            print("--- removed, deleted and told to Jellyfin, named by the provenance record")
+            print("--- deleted and told to Jellyfin, named by the provenance record")
             announcor = HookAnnouncor(logger)
-            message_id = announcor.removed('/ocean/video/movies/movin/the.florist.2026', 'deleted with 6 files', True,
-                                           record=florist_record)
-            all_as_expected &= self._check(message_id, captured[-1], 'REMOVED: The Florist (2026)',
-                                           ['deleted with 6 files, jellyfin told', 'folder **movies/movin/the.florist.2026/**'],
+            message_id = announcor.deleted('/ocean/video/movies/movin/the.florist.2026', 'deleted with 6 files', True,
+                                           infohash, record=florist_record)
+            all_as_expected &= self._check(message_id, captured[-1], 'DELETED: The Florist (2026)',
+                                           ['deleted with 6 files, jellyfin told', 'folder **movies/movin/the.florist.2026/**',
+                                            f'hash **{infohash}**'],
                                            ['wastebasket', 'testor@asusi7'], None)
 
             # ---
-            print("--- removed, refused outside the movie library")
-            refused_outcome = 'refused: its download location is outside **/ocean/video/movies/movin**'
+            print("--- deleted, a refused outcome, which the hook only logs and never sends")
+            refused_outcome = 'refused: its download location is outside the movie libraries'
             announcor = HookAnnouncor(logger)
-            message_id = announcor.removed(f'/ocean/video/tv/visionquest/s01/{tv_name}', refused_outcome, None)
-            all_as_expected &= self._check(message_id, captured[-1], 'REMOVED: VisionQuest S01E03 1080p x265-ELiTE',
-                                           [refused_outcome, f'folder **tv/visionquest/s01/{tv_name}/**'],
+            message_id = announcor.deleted(f'/ocean/video/tv/visionquest/s01/{tv_name}', refused_outcome, None, infohash)
+            all_as_expected &= self._check(message_id, captured[-1], 'DELETED: VisionQuest S01E03 1080p x265-ELiTE',
+                                           [refused_outcome, f'folder **tv/visionquest/s01/{tv_name}/**',
+                                            f'hash **{infohash}**'],
                                            ['wastebasket', 'testor@asusi7'], None)
 
             # ---
-            print("--- removed, deleted, the double-wrapped parent left for the hand, no provenance")
+            print("--- deleted, the double-wrapped parent left for the hand, no provenance")
             moonrise_name = 'Moonrise Kingdom (2012) Criterion (2160p)'
             parent_diversion = "parent **moonrise.kingdom.2012/** holds no video, left for the operator's hand"
             announcor = HookAnnouncor(logger)
             announcor.note(parent_diversion)
-            message_id = announcor.removed(f'/ocean/video/movies/movin/moonrise.kingdom.2012/{moonrise_name}',
-                                           'deleted with 7 files', True)
-            all_as_expected &= self._check(message_id, captured[-1], f'REMOVED: {moonrise_name}',
+            message_id = announcor.deleted(f'/ocean/video/movies/movin/moonrise.kingdom.2012/{moonrise_name}',
+                                           'deleted with 7 files', True, infohash)
+            all_as_expected &= self._check(message_id, captured[-1], f'DELETED: {moonrise_name}',
                                            ['deleted with 7 files, jellyfin told', f'! {parent_diversion}',
-                                            f'folder **movies/movin/moonrise.kingdom.2012/{moonrise_name}/**'],
+                                            f'folder **movies/movin/moonrise.kingdom.2012/{moonrise_name}/**',
+                                            f'hash **{infohash}**'],
                                            ['wastebasket', 'warning', 'diverted', 'testor@asusi7'], 4)
 
             # ---
-            print("--- removed, deleted, the Jellyfin call raised")
+            print("--- deleted, the Jellyfin call raised")
             announcor = HookAnnouncor(logger)
             try:
                 raise requests.ConnectionError('refused on purpose')
             except Exception as exc:  # the note as on_removed words it, through the same helper
                 announcor.note(f'jellyfin not told: {announcor.exception_text(exc)}')
-            message_id = announcor.removed('/ocean/video/movies/movin/the.florist.2026', 'deleted with 6 files', False,
-                                           record=florist_record)
-            all_as_expected &= self._check(message_id, captured[-1], 'REMOVED: The Florist (2026)',
+            message_id = announcor.deleted('/ocean/video/movies/movin/the.florist.2026', 'deleted with 6 files', False,
+                                           infohash, record=florist_record)
+            all_as_expected &= self._check(message_id, captured[-1], 'DELETED: The Florist (2026)',
                                            ['deleted with 6 files, jellyfin not told: call failed',
                                             '! jellyfin not told: **ConnectionError: refused on purpose**',
-                                            'folder **movies/movin/the.florist.2026/**'],
+                                            'folder **movies/movin/the.florist.2026/**', f'hash **{infohash}**'],
                                            ['wastebasket', 'warning', 'diverted', 'testor@asusi7'], 4)
         finally:
             NtfyClient._request = original_request

@@ -1,4 +1,4 @@
-"""The hook's voice over ntfy: one message per completed or removed event, one more only when the hook dies.
+"""The hook's voice over ntfy: one message per completed or deleted event, one more only when the hook dies.
 
 Written for a human reading ntfy's web app, in the click's voice at the magnetics end: the title is the agenda
 word in capitals and the name a human thinks in (naming.HumanNamor, one text at both ends), the first body line
@@ -30,7 +30,7 @@ class HookAnnouncor:
     """Says what the hook did; collects the diversions the flow went on past; never raises."""
 
     # ntfy shows a tag that is an emoji shortcode as that emoji before the title
-    kind_tags: ClassVar[dict[str, str]] = {'completed': 'white_check_mark', 'removed': 'wastebasket', 'failed': 'x'}
+    kind_tags: ClassVar[dict[str, str]] = {'completed': 'white_check_mark', 'deleted': 'wastebasket', 'failed': 'x'}
 
     def __init__(self, logger: Loggor):
         super().__init__()
@@ -80,20 +80,22 @@ class HookAnnouncor:
         return self.say('completed', title, [*outcome_lines, *self._diversion_lines, *detail_lines],
                         priority=priority, tags=tags)
 
-    def removed(self, folder: str, outcome: str | None, jellyfin_told: bool | None, *,
-                record: dict | None = None) -> str | None:
+    def deleted(self, folder: str, outcome: str | None, jellyfin_told: bool | None, torrent_id: str, *,
+                record: dict | None = None, is_kept: bool = False) -> str | None:
         """record: the click record from the folder's provenance.yml, None when there was none to read.
-        jellyfin_told: True told, False the call failed, None nothing deleted so nothing to tell."""
+        jellyfin_told: True told, False the call failed, None nothing deleted so nothing to tell.
+        is_kept: a video survived the ticked delete, the one anomaly, so the card is warned and high always."""
         try:
-            title = f'REMOVED: {HumanNamor.human_name(record, PurePosixPath(folder).name)}'
+            title = f'DELETED: {HumanNamor.human_name(record, PurePosixPath(folder).name)}'
             outcome_line = outcome or 'outcome unknown'
             if jellyfin_told is not None:
                 outcome_line += ', jellyfin told' if jellyfin_told else ', jellyfin not told: call failed'
-            detail_lines = [f'folder {self.bold(f"{self._relative_to_video_root(folder)}/")}']
+            detail_lines = [f'folder {self.bold(f"{self._relative_to_video_root(folder)}/")}',
+                            f'hash {self.bold(torrent_id)}']
         except Exception as exc:  # fail-open: a message that cannot be built is not sent
-            return self._fail(f'removed message not built: {exc!r}')
-        tags, priority = self._diverted(())
-        return self.say('removed', title, [outcome_line, *self._diversion_lines, *detail_lines],
+            return self._fail(f'deleted message not built: {exc!r}')
+        tags, priority = self._diverted((), is_alarmed=is_kept)
+        return self.say('deleted', title, [outcome_line, *self._diversion_lines, *detail_lines],
                         priority=priority, tags=tags)
 
     def failed(self, stage: str, exc: BaseException, torrent_name: str) -> str | None:
@@ -179,9 +181,9 @@ class HookAnnouncor:
     def _diversion_lines(self) -> list[str]:
         return [f'! {diversion}' for diversion in self._diversions]
 
-    def _diverted(self, tags: tuple[str, ...]) -> tuple[tuple[str, ...], str | None]:
-        """Any noted diversion adds the tags warning and diverted and makes the priority high."""
-        if not self._diversions:
+    def _diverted(self, tags: tuple[str, ...], *, is_alarmed: bool = False) -> tuple[tuple[str, ...], str | None]:
+        """Any noted diversion, or a caller's alarm, adds the tags warning and diverted and makes the priority high."""
+        if not self._diversions and not is_alarmed:
             return tags, None
         return (*tags, 'warning', 'diverted'), 'high'
 

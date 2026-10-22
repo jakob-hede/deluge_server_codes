@@ -1,6 +1,5 @@
 from pathlib import Path
 from time import sleep
-import shutil
 
 import yaml
 from twisted.internet.defer import Deferred
@@ -9,7 +8,7 @@ from .announcor import HookAnnouncor
 from .commons import Commons
 from .jellyfin_communicator import JellyfinCommunicator
 from .logge import DelugapiTorrentorLoggor
-from .torrenthandlor import TorrentLabelHandlor, TorrentHandlorMovin
+from .torrenthandlor import TorrentLabelHandlor
 from .torrentparsor import TorrentParsor
 
 from delugapi.response import DelugApiResponse
@@ -42,9 +41,6 @@ class Torrentor:
         self.logger = DelugapiTorrentorLoggor()
         self.reaction_response: DelugApiResponse = None
         self.announcor = HookAnnouncor(self.logger)  # the one voice of whichever hook this process runs
-        # the removed hook's outcome, kept at every exit of remove_emptied_folder for its message
-        self.remove_outcome: str | None = None
-        self.remove_leftovers: int | None = None
 
     def process_event(self, event_name):
         print(f"Processing event '{event_name}' for torrent '{self.torrent_name}' ({self.torrent_id})")
@@ -590,112 +586,5 @@ class Torrentor:
     def on_dummy_removed(self):
         self.logger.info(f"Torrent '{self.torrent_name}' has been DUMMY removed..")
         return True
-
-    def on_removed(self):
-        self.logger.info(f"Torrent '{self.torrent_name}' has been removed..")
-        folder = Path(self.base_sdir) / self.torrent_name
-        try:
-            # the click record in the folder's provenance names the message; read before the delete, fail-open
-            try:
-                provenance = yaml.safe_load((folder / 'provenance.yml').read_text())
-                record = provenance.get('click') if isinstance(provenance, dict) else None
-            except Exception:
-                record = None
-            self.announcor.record = record
-            jellyfin_told = None
-            if self.remove_emptied_folder(folder, TorrentHandlorMovin._destin_dir):
-                # Jellyfin is told the one path, never asked to delete an item, which deletes the files too
-                try:
-                    JellyfinCommunicator().report_media_deleted(str(folder))
-                    jellyfin_told = True
-                except Exception as exc:
-                    jellyfin_told = False
-                    self.announcor.note(f'jellyfin not told: {self.announcor.exception_text(exc)}')
-            announced = self.announcor.removed(str(folder), self.remove_outcome, jellyfin_told, record=record)
-            if announced:
-                self.logger.info(f'Announced {announced}')
-        except Exception as exc:
-            # the removed hook runs outside twisted, so it dies here: announced, and raised on as it was
-            self.announcor.failed('removed', exc, self.torrent_name)
-            raise
-
-    def remove_emptied_folder(self, folder: Path, library_dir: Path, top: int = 60) -> bool:
-        # a remove with data deletes only the torrent's own files, so the folder keeps what Jellyfin and the
-        # sidecars put there; it goes once no video is left in it, and never anything outside the library
-        # every exit keeps its outcome, in the words of its log line, for the removed message
-        self.remove_outcome = None
-        self.remove_leftovers = None
-        library = library_dir.resolve()
-        if '..' in folder.parts:
-            return self._refuse_removal(folder, 'its path climbs with {}', '..')
-        if folder.resolve() == library:
-            return self._refuse_removal(folder, 'it is the library itself')
-        if not folder.parent.resolve().is_relative_to(library):
-            return self._refuse_removal(folder, 'its download location is outside {}', library_dir)
-        if folder.is_symlink():
-            return self._refuse_removal(folder, 'it is a symlink')
-        if not folder.exists():
-            return self._refuse_removal(folder, 'it does not exist')
-        if not folder.is_dir():
-            return self._refuse_removal(folder, 'it is not a directory')
-        resolved_folder = folder.resolve()
-        if resolved_folder == library or not resolved_folder.is_relative_to(library):
-            return self._refuse_removal(folder, 'it resolves to {}, not below {}', resolved_folder, library_dir)
-
-        # libtorrent deletes the data in its own thread after the event, so the video may still be going
-        video_extensions = TorrentHandlorMovin.video_extensions
-        videos: list[Path] | None = None
-        for i in range(1, top + 1):
-            try:
-                videos = [path for path in folder.rglob('*') if path.suffix.lower() in video_extensions and path.is_file()]
-            except OSError:
-                videos = None
-            if videos == []:
-                self.logger.info(f"No video left in '{folder}' ({i}/{top})")
-                break
-            if i == 1 or i % 10 == 0:
-                videos_text = 'scan interrupted' if videos is None else f"{len(videos)} video, first '{videos[0].relative_to(folder)}'"
-                self.logger.info(f"Waiting for the video to go... ({i}/{top}) {videos_text}")
-            sleep(1)
-        if videos != []:
-            self.logger.info(f"Video still in '{folder}' after {top} rounds, left as a remove without data")
-            self.remove_outcome = f'kept, video still present after {top} rounds'
-            return False
-
-        if not folder.exists():
-            self.logger.info(f"'{folder}' is gone already, nothing to delete")
-            self.remove_outcome = 'gone already'
-            return False
-        left_paths = list(folder.rglob('*'))
-        left = sorted(str(path.relative_to(folder)) for path in left_paths)
-        # the message counts files, a real directory is not one; a symlink is, rmtree removes it as a link
-        left_file_count = sum(1 for path in left_paths if path.is_symlink() or not path.is_dir())
-        self.logger.info(f"Deleting '{folder}' with what is left: {left}")
-        try:
-            shutil.rmtree(folder)
-        except OSError as e:
-            self.logger.error(f"Error deleting '{folder}': {e}")
-            self.remove_outcome = f'error: {self.announcor.bold(e)}'
-            self.announcor.note(f"deletion failed, {self.announcor.bold(f'{folder.name}/')} left for the operator's hand")
-            return False
-        self.logger.remark(f"Deleted '{folder}'")
-        self.remove_outcome = f'deleted with {left_file_count} files'
-        self.remove_leftovers = left_file_count
-
-        # a double-wrapped folder's parent is below the library too, it is left for the operator's hand
-        parent = folder.parent
-        if parent.resolve() != library:
-            parent_videos = [path for path in parent.rglob('*') if path.suffix.lower() in video_extensions and path.is_file()]
-            if not parent_videos:
-                self.logger.warning(f"Parent '{parent}' holds no video, left for the operator's hand")
-                self.announcor.note(f"parent {self.announcor.bold(f'{parent.name}/')} holds no video, left for the operator's hand")
-        return True
-
-    def _refuse_removal(self, folder: Path, reason: str, *objects: object) -> bool:
-        # each {} of the reason holds an object, quoted in the log as it always was, set in bold in the message
-        log_reason = reason.format(*(f"'{obj}'" for obj in objects))
-        self.logger.info(f"Not removing '{folder}', {log_reason}")
-        self.remove_outcome = f'refused: {reason.format(*(self.announcor.bold(obj) for obj in objects))}'
-        return False
 
 

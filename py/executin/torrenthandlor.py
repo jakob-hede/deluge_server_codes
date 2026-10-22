@@ -9,6 +9,7 @@ from pathlib import Path
 
 import yaml
 
+from . import extensions
 from .logge import TorrentHandlorLoggor
 from delugapi.torrent import DelugapiTorrent
 
@@ -178,8 +179,8 @@ class TorrentHandlorMovin(TorrentLabelHandlor):
     _destin_dir: Path = Path('/ocean/video/movies/movin')
     _is_jellyable: bool = True
     jelly_library_name = 'movin'
-    video_extensions: tuple[str, ...] = ('.mp4', '.mkv', '.avi', '.mov', '.wmv', '.m4v', '.ts')
-    subtitle_extensions: tuple[str, ...] = ('.srt', '.ass', '.ssa', '.vtt', '.sub')
+    video_extensions: tuple[str, ...] = extensions.video_extensions
+    subtitle_extensions: tuple[str, ...] = extensions.subtitle_extensions
     subtitle_languages: dict[str, str] = {'english': 'en', 'eng': 'en', 'en': 'en', 'danish': 'da', 'dan': 'da', 'da': 'da'}
     jellyfin_names: tuple[str, ...] = ('movie.nfo', 'folder.jpg', 'poster.jpg', 'backdrop.jpg', 'fanart.jpg', 'landscape.jpg',
                                        'logo.png', 'banner.jpg', 'thumb.jpg', 'clearart.png', 'disc.png')
