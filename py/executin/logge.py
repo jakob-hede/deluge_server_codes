@@ -185,7 +185,7 @@ class ExecutorLoggor(Loggor):
 
 
 class OceanorLoggor(Loggor):
-    moniker = 'oceanor'
+    moniker = 'oceanic_action'
 
 
 class StatusorLoggor(Loggor):

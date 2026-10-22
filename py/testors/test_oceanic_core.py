@@ -121,7 +121,7 @@ class Testor:
     def __init__(self):
         super().__init__()
         self.base = Path(tempfile.mkdtemp(prefix='oceanic_testor_'))
-        self.log_file = self.base / 'oceanic.log'
+        self.log_file = self.base / 'oceanic_plugin.log'
         self.command = self.base / 'oceanic.sh'
         self.command.write_text('#!/bin/sh\nexit 0\n')
         self.command.chmod(0o755)
@@ -129,7 +129,10 @@ class Testor:
         # the config the plugin's enable will get, ConfigManager handing back one object per file name
         config = configmanager.ConfigManager('oceanic.conf', Core.DEFAULT_CONFIG)
         config['command'] = str(self.command)
-        config['log_file'] = str(self.log_file)
+        # the key an oceanic.conf written by 0.1 carries, which 0.2 must not read; the log is the class's
+        self.old_log_file = self.base / 'oceanic.log'
+        config['log_file'] = str(self.old_log_file)
+        Core.log_file = str(self.log_file)
         self.rpc_server = FakeRPCServer()
         self.event_manager = FakeEventManager()
         self.alert_manager = FakeAlertManager()
@@ -177,14 +180,16 @@ class Testor:
         events = [(event, handler.__name__) for event, handler in self.event_manager.handlers]
         alerts = [(alert_type, handler.__name__) for alert_type, handler in self.alert_manager.handlers]
         self.judge('enable registers one event handler and three alert handlers', self.new_lines(),
-                   [f"enabled Oceanic 0.1, command {self.command}, events ['removed', 'deleted', 'delete_failed'], "
+                   [f"enabled Oceanic 0.2, command {self.command}, events ['removed', 'deleted', 'delete_failed'], "
                     f"log {self.log_file}"],
                    self.new_spawns(), [],
                    ('event handlers', events, [('PreTorrentRemovedEvent', 'on_preremoved')]),
                    ('alert handlers', alerts, [('torrent_deleted', 'on_torrent_deleted'),
                                                ('torrent_delete_failed', 'on_torrent_delete_failed'),
                                                ('torrent_removed', 'on_torrent_removed')]),
-                   ('rpc objects', list(self.rpc_server.objects), ['oceanic']))
+                   ('rpc objects', list(self.rpc_server.objects), ['oceanic']),
+                   ('log_file in the defaults', 'log_file' in Core.DEFAULT_CONFIG, False),
+                   ("the 0.1 conf's log_file written to", self.old_log_file.exists(), False))
 
     def case_preremoved_caches(self):
         self.add_torrent(self.florist_id, 'the.florist.2026', self.movin)

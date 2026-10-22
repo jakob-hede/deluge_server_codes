@@ -47,22 +47,25 @@ class Hearing:
 
 class Core(CorePluginBase):
     """
-    Hears libtorrent's removed, deleted and delete-failed alerts, which Deluge's alert manager receives and
-    nothing in Deluge handles, writes every one to its own log, and spawns the one configured command for every
-    one, the event named after the alert; all policy lives in the hook the command reaches. An alert handler
-    has two seconds before the alert manager gives up on it, so nothing here blocks, sleeps or waits: the command
-    is spawned and its end is a callback. Deluge's own log is not read on this box, so no handler raises: a
-    failure is one line in the plugin's log.
+    Oceanic's plugin. Hears libtorrent's removed, deleted and delete-failed alerts, which Deluge's alert manager
+    receives and nothing in Deluge handles, writes every one to its own log, oceanic_plugin.log, and spawns the
+    shim, the one configured command, for every one, the event named after the alert; the shim runs the runnor,
+    which hands the event to the hook, and all policy lives in the hook. An alert handler has two seconds before
+    the alert manager gives up on it, so nothing here blocks, sleeps or waits: the shim is spawned and its end is
+    a callback. Deluge's own log is not read on this box, so no handler raises: a failure is one line in the
+    plugin's log.
     """
 
-    plugin_version: ClassVar[str] = '0.1'
+    plugin_version: ClassVar[str] = '0.2'
+    # the plugin's log is no setting, since Deluge loads oceanic.conf over the defaults: the log_file key an
+    # oceanic.conf written by 0.1 carries is read by nothing
+    log_file: ClassVar[str] = '/deluge/log/oceanic_plugin.log'
     DEFAULT_CONFIG: ClassVar[dict[str, Any]] = {
         'command': '/codes/oceanic_plugin/oceanic.sh',
         'events': ['removed', 'deleted', 'delete_failed'],
-        'log_file': '/deluge/log/oceanic.log',
     }
     logger: ClassVar[logging.Logger] = logging.getLogger(__name__)
-    # a DelugApi prints its password when it is built; the responder's output is filtered as every shell here does
+    # a DelugApi prints its password when it is built; the shim's output is filtered as every shell here does
     password_line: ClassVar[re.Pattern[str]] = re.compile(r'^(DelugApi [^,]*,[^,]*,[^,]*),.*$', re.MULTILINE)
 
     # set by enable, before any handler is registered
@@ -84,7 +87,7 @@ class Core(CorePluginBase):
         for hearing in self.hearings:
             hearing.register()
         self.log_line(f"enabled Oceanic {self.plugin_version}, command {self.config['command']}, "
-                      f"events {self.config['events']}, log {self.config['log_file']}")
+                      f"events {self.config['events']}, log {self.log_file}")
 
     def disable(self) -> None:
         self.config.save()
@@ -189,8 +192,8 @@ class Core(CorePluginBase):
         self.logger.debug(text)
         with contextlib.suppress(Exception):
             stamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S,%f')[:-3]
-            with open(self.config['log_file'], 'a', encoding='utf-8') as log_file:
-                log_file.write(f'{stamp} | {text}\n')
+            with open(self.log_file, 'a', encoding='utf-8') as log:
+                log.write(f'{stamp} | {text}\n')
 
     def log_output(self, stream: str, data: bytes) -> None:
         text = self.password_line.sub(r'\1, <REDACTED>', data.decode('utf8', errors='replace'))

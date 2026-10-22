@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 #
-# Oceanic's one responder, run by the plugin for every event as
+# Oceanic's shim, run by the plugin for every event as
 #   oceanic.sh <event> <torrent id> <torrent name> <location> [<detail>]
-# the detail today the error text of delete_failed. One line appended to oceanic_plugin.log, then oceanor.py
-# with oce_<event> and the rest of the arguments; the script's exit code is the Python's. The same script
-# runs in the container and on dev.
+# the detail today the error text of delete_failed. One line appended to oceanic_shim.log, then the runnor,
+# oceanor.py, with oce_<event> and the rest of the arguments; the script's exit code is the runnor's. The same
+# script runs in the container and on dev.
 #
 
 __oce_habitize() {
@@ -40,7 +40,7 @@ _oce_respond() {
     __oce_stamp
     declare event="$1" quoted
     printf -v quoted "'%s' " "${@:2}"
-    printf '%s %-13s | %s\n' "${stamp}" "${event}" "${quoted% }" >> "${log_dir}/oceanic_plugin.log"
+    printf '%s %-13s | %s\n' "${stamp}" "${event}" "${quoted% }" >> "${log_dir}/oceanic_shim.log"
     "${pyxe}" "${py_dir}/runs/oceanor.py" "oce_${event}" "${@:2}"
 }
 

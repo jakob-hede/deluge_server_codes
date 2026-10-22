@@ -11,9 +11,10 @@ if TYPE_CHECKING:
 
 class OceanicHook:
     """
-    Oceanic's hook, which oceanor.py hands every oce_ event. A ticked delete acts: oce_deleted and oce_delete_failed
-    clean the payload's folder in the movin library, tell Jellyfin, and say so in one DELETED card;
-    oce_removed, which every remove ends in, only logs. Only pathlib and the loggor are imported here: shutil, whose
+    Oceanic's hook, which the runnor, oceanor.py, hands every oce_ event, the two logging to oceanic_action.log. A
+    ticked delete acts: oce_deleted and oce_delete_failed clean the payload's folder in the movin library, tell
+    Jellyfin, and say so in one DELETED card; oce_removed, which every remove ends in, only logs. Only pathlib and
+    the loggor are imported here: shutil, whose
     compression modules weigh most of a megabyte, yaml, the announcor, the Jellyfin communicator and the video
     suffixes are imported inside the methods that act, when they act, so a plain remove costs the interpreter and a
     log line.
@@ -42,13 +43,10 @@ class OceanicHook:
 
     @property
     def announcor(self) -> HookAnnouncor:
-        # deferred: the voice is loaded on the acting path only, or when the hook dies
-        announcor = self._announcor
-        if announcor is None:
-            from executin.announcor import HookAnnouncor
-            announcor = HookAnnouncor(self.loggor)
-            self._announcor = announcor
-        return announcor
+        if self._announcor is None:
+            from executin.announcor import HookAnnouncor  # deferred: the voice is loaded on the acting path only, or when the hook dies
+            self._announcor = HookAnnouncor(self.loggor)
+        return self._announcor
 
     def process_event(self, event_name: str, *extras: str) -> bool | None:
         if event_name == 'oce_removed':

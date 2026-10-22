@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 #
-# Oceanic's entry, beside Execute's executor.py. The responder oceanic_plugin/oceanic.sh runs it as
+# Oceanic's runnor, beside Execute's executor.py. The shim oceanic_plugin/oceanic.sh runs it as
 #   oceanor.py oce_<event> <torrent id> <torrent name> <location> [<detail>]
-# and it hands the event to Oceanic's own hook, OceanicHook.process_event. A torrent the plugin speaks of has
-# left the daemon, so nothing here speaks to it: from executin only the loggor, nothing from delugapi or twisted.
+# and it hands the event to the hook, OceanicHook.process_event, the two logging to oceanic_action.log. A torrent
+# the plugin speaks of has left the daemon, so nothing here speaks to it: from executin only the loggor, nothing
+# from delugapi or twisted.
 #
 
 import sys
