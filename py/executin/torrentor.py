@@ -70,6 +70,36 @@ class Torrentor:
         data: dict = yaml.safe_load(survey_yaml)
         return data
 
+    def torrent_file_for(self, *names: str) -> Path | None:
+        # the daemon names its copy of the torrent by the torrent's name when the metadata arrives,
+        # which for a magnet is often not the name the added event carried
+        looked_for: list[str] = []
+        for name in names:
+            if not name or name in looked_for:
+                continue
+            looked_for.append(name)
+            torrent_file = self.torrents_dir / f'{name}.torrent'
+            if torrent_file.exists():
+                return torrent_file
+        return None
+
+    def survey_write(self, torrent_file: Path, event_name: str) -> dict:
+        survey_data: dict = {}
+        execute_args_data: dict = {
+            'torrent_id': self.torrent_id,
+            'torrent_name': self.torrent_name,
+            'added_base_dir': self.base_sdir,
+            'timestamp': Commons.singleton.timestamp(),
+            'event': event_name,
+            'torrent_file': str(torrent_file),
+        }
+        survey_data['execute_args'] = execute_args_data
+        parsor = TorrentParsor(torrent_file)
+        torrent_data = parsor.parse()
+        survey_data['torrent_data'] = torrent_data
+        self.survey_file_write_data(survey_data)
+        return survey_data
+
     @property
     def browser_source_file(self) -> Path:
         return self.browser_source_dir / f'{self.torrent_id}.yml'
@@ -133,24 +163,28 @@ class Torrentor:
                 self.reaction_response.result = transaction.response.result
                 self.reaction_response.error = transaction.response.error
 
-            torrent_file = self.torrents_dir / f"{self.torrent_name}.torrent"
-            if torrent_file.exists():
-                self.logger.info(f"SUCCES: Torrent file '{torrent_file}' exists")
-            else:
-                self.logger.info(f"Error: Torrent file '{torrent_file}' not found")
+            # a magnet's copy is written only when the metadata arrives, under the name the daemon reports from then on
+            torrent_file = None
+            daemon_name = ''
+            top = 120
+            for i in range(1, top + 1):
+                transaction = DelugApiStatusTransaction(torrent_id=self.torrent_id)
+                reply = yield api_client.api.transactize(transaction)
+                updated_torrent = transaction.delugapi_torrent_from_status()
+                daemon_name = updated_torrent.name if updated_torrent else ''
+                torrent_file = self.torrent_file_for(daemon_name, self.torrent_name)
+                if torrent_file is not None:
+                    self.logger.info(f"SUCCES: Torrent file '{torrent_file}' exists ({i}/{top})")
+                    break
+                if i == 1 or i % 10 == 0:
+                    self.logger.info(
+                        f"Waiting for torrent file... ({i}/{top}) under '{daemon_name}' or '{self.torrent_name}'")
+                sleep(1)
+            if torrent_file is None:
+                self.logger.warning(
+                    f"Error: Torrent file not found after {top} rounds under '{daemon_name}' or '{self.torrent_name}', no survey")
                 return
-            survey_data: dict = {}
-            execute_args_data: dict = {
-                'torrent_id': self.torrent_id,
-                'torrent_name': self.torrent_name,
-                'added_base_dir': self.base_sdir,
-                'timestamp': Commons.singleton.timestamp(),
-            }
-            survey_data['execute_args'] = execute_args_data
-            parsor = TorrentParsor(torrent_file)
-            torrent_data = parsor.parse()
-            survey_data['torrent_data'] = torrent_data
-            self.survey_file_write_data(survey_data)
+            self.survey_write(torrent_file, 'exe_added')
 
             # Reactor lifecycle is managed by delugapi_wrap / Twistor — do NOT stop here
             return reply
@@ -227,6 +261,15 @@ class Torrentor:
             if label:
                 print(f' - label: "{label}"')
                 survey_data = self.survey_file_read_data()
+                if not survey_data:
+                    # the added event found no copy of the torrent, at completion the metadata is certain
+                    torrent_file = self.torrent_file_for(delugapi_torrent.name, self.torrent_name)
+                    if torrent_file is not None:
+                        survey_data = self.survey_write(torrent_file, 'exe_completed')
+                        self.logger.info(f"Survey missing at completed, written now from '{torrent_file}'")
+                    else:
+                        self.logger.warning(
+                            f"Survey missing at completed, no torrent file under '{delugapi_torrent.name}' or '{self.torrent_name}'")
                 browser_source_data = self.browser_source_file_read_data()
                 label_handler = TorrentLabelHandlor.factory(
                     label,
