@@ -279,6 +279,44 @@ class Torrentor:
                                     self.logger.warning(f'Rename not reported after {top} rounds, moving as not renamed')
                         else:
                             self.logger.warning('Not at daemon, skipping rename')
+                    # the files are renamed only inside a confirmed pattern folder, a failed folder rename nests as before
+                    if label_handler.is_renamed:
+                        if Commons.singleton.is_at_daemon:
+                            file_plan = label_handler.file_rename_plan(label_handler.latest_files)
+                            if file_plan:
+                                self.logger.info(f'At daemon, renaming files by plan {file_plan} ...')
+                                transaction = DelugApiRenameFilesTransaction(torrent_id=torrent_id,
+                                                                             filenames=file_plan)
+                                reply = yield api_client.api.transactize(transaction)
+                                transaction_response = transaction.response
+                                print(f"transaction_response: {transaction_response}")
+                                if transaction_response.error:
+                                    self.logger.warning(f"Error renaming files, moving as named: {transaction_response.error}")
+                                else:
+                                    self.logger.remark(
+                                        f"Dispatched renaming {len(file_plan)} files, {str(transaction_response).strip()}")
+                                    planned_paths = dict(file_plan)
+                                    is_files_renamed = False
+                                    top = 60
+                                    for i in range(1, top + 1):
+                                        transaction = DelugApiStatusTransaction(torrent_id=self.torrent_id)
+                                        reply = yield api_client.api.transactize(transaction)
+                                        updated_torrent = transaction.delugapi_torrent_from_status()
+                                        current_paths = {file['index']: file['path'] for file in updated_torrent.files} if updated_torrent else {}
+                                        done_count = sum(current_paths.get(index) == path for index, path in planned_paths.items())
+                                        self.logger.info(f"Waiting for file renames to complete... ({i}/{top}) {done_count}/{len(planned_paths)} done")
+                                        if done_count == len(planned_paths):
+                                            label_handler.current_files = updated_torrent.files
+                                            is_files_renamed = True
+                                            self.logger.info("File renames completed successfully!")
+                                            break
+                                        sleep(1)
+                                    if not is_files_renamed:
+                                        if updated_torrent:
+                                            label_handler.current_files = updated_torrent.files
+                                        self.logger.warning(f'File renames not reported after {top} rounds, moving as named')
+                        else:
+                            self.logger.warning('Not at daemon, skipping file renames')
                     destination_dir = label_handler.destin_dir
                     origin_dir = delugapi_torrent.download_location
                     destination_sdir = str(destination_dir)

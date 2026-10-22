@@ -39,7 +39,7 @@ class Testor:
         moonrise_record = {'media_title': 'Moonrise Kingdom', 'media_year': 2012, 'media_type': 'movie', 'media_via': 'tmdb'}
         movin_dir = '/ocean/video/movies/movin'
         yts_plan = (f'{yts_folder}/', 'the.florist.2026/')
-        bare_plan = [(0, f'the.florist.2026/{bare_name}')]
+        bare_plan = [(0, 'the.florist.2026/the.florist.2026.mkv')]
         moonrise_plan = (f'{moonrise_folder}/', 'moonrise.kingdom.2012/')
         # (case, name, files, survey, record, rename outcome, expected plan, expected destin_dir)
         cases = [

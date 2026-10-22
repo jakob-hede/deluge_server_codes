@@ -130,6 +130,9 @@ class TorrentLabelHandlor(TorrentHandlor):
     def pattern_dir(self) -> Path | None:
         return None
 
+    def file_rename_plan(self, files: list[dict]) -> list[tuple[int, str]]:
+        return []
+
     @property
     def sidecar_dir(self) -> Path | None:
         return None
@@ -175,6 +178,12 @@ class TorrentHandlorMovin(TorrentLabelHandlor):
     _destin_dir: Path = Path('/ocean/video/movies/movin')
     _is_jellyable: bool = True
     jelly_library_name = 'movin'
+    video_extensions: tuple[str, ...] = ('.mp4', '.mkv', '.avi', '.mov', '.wmv', '.m4v', '.ts')
+    subtitle_extensions: tuple[str, ...] = ('.srt', '.ass', '.ssa', '.vtt', '.sub')
+    subtitle_languages: dict[str, str] = {'english': 'en', 'eng': 'en', 'en': 'en', 'danish': 'da', 'dan': 'da', 'da': 'da'}
+    jellyfin_names: tuple[str, ...] = ('movie.nfo', 'folder.jpg', 'poster.jpg', 'backdrop.jpg', 'fanart.jpg', 'landscape.jpg',
+                                       'logo.png', 'banner.jpg', 'thumb.jpg', 'clearart.png', 'disc.png')
+    parked_prefix: str = 'release.'
 
     @cached_property
     def pattern_dir_name(self) -> str:
@@ -229,12 +238,110 @@ class TorrentHandlorMovin(TorrentLabelHandlor):
             rename_plan = (f'{folder}/', f'{pattern_dir_name}/')
         elif len(paths) == 1 and '/' not in paths[0]:
             pattern_dir_name = self.pattern_dir_name
-            rename_plan = [(files[0]['index'], f'{pattern_dir_name}/{paths[0]}')]
+            suffix = Path(paths[0]).suffix.lower()
+            # a bare video file is wrapped straight into its final name, so it needs one rename
+            new_name = f'{pattern_dir_name}{suffix}' if suffix in self.video_extensions else paths[0]
+            rename_plan = [(files[0]['index'], f'{pattern_dir_name}/{new_name}')]
         else:
             self.logger.info(f"No rename plan, files not under one root folder (structure_type '{structure_type}')")
             return None
         self.logger.info(f"Rename plan: {rename_plan} (structure_type '{structure_type}')")
         return rename_plan
+
+    def file_rename_plan(self, files: list[dict]) -> list[tuple[int, str]]:
+        # the movie file, the English and Danish subtitles and the names Jellyfin's saver writes, renamed inside
+        # the pattern folder; only the pairs whose path changes, so a re-fired event plans nothing
+        pattern_dir_name = self.pattern_dir_name
+        prefix = f'{pattern_dir_name}/'
+        if not files:
+            self.logger.info("No file rename plan, torrent has no files")
+            return []
+        if not all(file['path'].startswith(prefix) for file in files):
+            self.logger.info(f"No file rename plan, files not all under '{prefix}'")
+            return []
+        # every path held now or planned stays taken, since deluge renames onto a held path unchecked
+        taken_paths = {file['path'] for file in files}
+        file_plan: dict[int, str] = {}
+
+        video_files = [file for file in files if Path(file['path']).suffix.lower() in self.video_extensions]
+        movie_file = max(video_files, key=lambda file: file.get('size', 0)) if video_files else None
+        movie_stem = Path(movie_file['path']).stem if movie_file else None
+        if movie_file:
+            new_path = f"{prefix}{pattern_dir_name}{Path(movie_file['path']).suffix.lower()}"
+            self._plan_file_rename(movie_file, new_path, 'movie file', taken_paths, file_plan)
+        else:
+            self.logger.info("File rename: no movie file among the files")
+
+        en_sizes: set[int] = set()
+        root_copies: list[dict] = []
+        for file in files:
+            path = file['path']
+            file_path = Path(path)
+            if file_path.suffix.lower() not in self.subtitle_extensions:
+                continue
+            if file_path.name.startswith(self.parked_prefix):
+                self.logger.info(f"File rename: subtitle '{path}' skipped, already parked")
+                continue
+            is_at_root = '/' not in path[len(prefix):]
+            stem = file_path.stem
+            if is_at_root and stem == movie_stem:
+                root_copies.append(file)
+                continue
+            # a name that begins with the movie's stem is read after it, so a title word such as Danish is no language
+            tag = stem[len(movie_stem) + 1:] if movie_stem and stem.startswith(f'{movie_stem}.') else stem
+            tokens = [token.strip().lower() for token in tag.split('.')]
+            languages = {self.subtitle_languages[token] for token in tokens if token in self.subtitle_languages}
+            if len(languages) != 1:
+                reason = 'no English or Danish token' if not languages else 'both English and Danish tokens'
+                self.logger.info(f"File rename: subtitle '{path}' skipped, {reason}")
+                continue
+            language = languages.pop()
+            flags = ''
+            if any(token in ('sdh', 'hi', 'cc') for token in tokens):
+                flags += '.sdh'
+            if 'forced' in tokens:
+                flags += '.forced'
+            new_path = f'{prefix}{pattern_dir_name}.{language}{flags}{file_path.suffix.lower()}'
+            is_planned = self._plan_file_rename(file, new_path, f'{language}{flags} subtitle', taken_paths, file_plan)
+            if is_planned and language == 'en' and 'size' in file:
+                en_sizes.add(file['size'])
+
+        site = self._browser_source_data.get('site') if self._browser_source_data else None
+        for file in root_copies:
+            path = file['path']
+            file_path = Path(path)
+            if file.get('size') in en_sizes:
+                new_path = f'{prefix}{self.parked_prefix}{file_path.name}'
+                self._plan_file_rename(file, new_path, 'untagged root copy, the size of an en subtitle', taken_paths, file_plan)
+            elif site == 'yts':
+                new_path = f'{prefix}{pattern_dir_name}.en{file_path.suffix.lower()}'
+                self._plan_file_rename(file, new_path, 'untagged root copy, en by the yts convention', taken_paths, file_plan)
+            else:
+                self.logger.info(f"File rename: untagged root copy '{path}' skipped, no en subtitle of its size and site '{site}' is not yts")
+
+        for file in files:
+            path = file['path']
+            name = Path(path).name
+            if '/' not in path[len(prefix):] and name.lower() in self.jellyfin_names:
+                new_path = f'{prefix}{self.parked_prefix}{name}'
+                self._plan_file_rename(file, new_path, "a name Jellyfin's saver writes", taken_paths, file_plan)
+
+        plan = list(file_plan.items())
+        self.logger.info(f"File rename plan: {plan}")
+        return plan
+
+    def _plan_file_rename(self, file: dict, new_path: str, rule: str, taken_paths: set[str], file_plan: dict[int, str]) -> bool:
+        path = file['path']
+        if new_path == path:
+            self.logger.info(f"File rename: '{path}' already named ({rule})")
+            return True
+        if new_path in taken_paths:
+            self.logger.info(f"File rename: '{path}' skipped, '{new_path}' is taken ({rule})")
+            return False
+        taken_paths.add(new_path)
+        file_plan[file['index']] = new_path
+        self.logger.info(f"File rename: '{path}' -> '{new_path}' ({rule})")
+        return True
 
     @property
     def destin_dir(self) -> Path:
