@@ -34,7 +34,11 @@ class JellyfinCommunicator:
             "replaceAllImages": "false",
         })
         self.logger.info(f"Jellyfin library '{library_name}' refresh triggered successfully")
-        self.notify_clients_refresh(library_name, title)
+        # the toast is a courtesy to whoever watches Jellyfin, not the refresh: its failure is logged, never raised
+        try:
+            self.notify_clients_refresh(library_name, title)
+        except Exception as exc:
+            self.logger.warning(f"toast skipped: {type(exc).__name__}: {exc}")
 
     def notify_clients_refresh(self, library_name: str, title: str = '') -> None:
         """Send a toast message to all active Jellyfin sessions."""

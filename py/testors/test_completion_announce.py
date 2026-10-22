@@ -2,6 +2,8 @@
 import import_helpor  # noqa NEEDED!!!
 import os
 
+import requests
+
 from delugapi.torrent import DelugapiTorrent
 from executin.announcor import HookAnnouncor
 from executin.logge import TestLoggor
@@ -143,6 +145,22 @@ class Testor:
                                             'jellyfin none', 'size 1.9 GB',
                                             '! folder rename not reported after 60 rounds, moved as not renamed',
                                             '! not where expected for the Jellyfin refresh, none asked for'],
+                                           ['completed', 'movin', 'diverted', 'testor@asusi7'], 4)
+
+            # ---
+            print("--- moved, the Jellyfin refresh raised")
+            announcor = HookAnnouncor(logger)
+            refused_text = f"HTTPConnectionPool(host='10.4.9.11', port=8096): Max retries exceeded {'x' * 200}\nsecond line"
+            try:
+                raise requests.ConnectionError(refused_text)
+            except Exception as exc:  # the note as on_completed words it
+                announcor.note(f'jellyfin refresh failed: {type(exc).__name__}: {str(exc).partition("\n")[0][:200]}')
+            message_id = announcor.completed(florist_torrent, florist_handler, browser_source_data=florist_record,
+                                             destination=str(florist_handler.destin_dir))
+            all_as_expected &= self._check(message_id, captured[-1], 'done: The Florist (2026)',
+                                           ['label movin', 'folder the.florist.2026/', 'moved movies/movin',
+                                            'jellyfin none', 'size 1.9 GB',
+                                            f'! jellyfin refresh failed: ConnectionError: {refused_text[:200]}'],
                                            ['completed', 'movin', 'diverted', 'testor@asusi7'], 4)
 
             # ---

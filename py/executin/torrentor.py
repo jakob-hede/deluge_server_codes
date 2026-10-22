@@ -460,8 +460,11 @@ class Torrentor:
                             dev_mode = True
                             if dev_mode or Commons.singleton.is_at_daemon:
                                 self.logger.info(f'jellyfin_refresh At daemon!  {destination_sdir}')
-                                self.jellyfin_refresh(label_handler, destination_sdir)
-                                announce_refreshed = True
+                                try:
+                                    self.jellyfin_refresh(label_handler, destination_sdir)
+                                    announce_refreshed = True
+                                except Exception as exc:
+                                    announcor.note(f'jellyfin refresh failed: {type(exc).__name__}: {str(exc).partition("\n")[0][:200]}')
                         else:
                             self.logger.warning(f'Media is NOT in expected location for Jellyfin refresh: '
                                                 f'Expected: "{destination_sdir}"'
