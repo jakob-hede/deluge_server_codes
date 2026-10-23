@@ -4,7 +4,9 @@
 #   oceanor.py oce_<event> <torrent id> <torrent name> <location> [<detail>...]
 # and it hands the event to the hook, OceanicHook.process_event, the two logging to oceanic_action.log. Nothing
 # here speaks to the daemon, the removal trio's torrents having left it and every other event only logged: from
-# executin only the loggor, nothing from delugapi or twisted.
+# executin only the loggor, nothing from delugapi or twisted. The daemon's and Jellyfin's addresses, which the hook
+# reaches where it acts, come from the container's environment, MAGNETICS_DELUGED_HOST, MAGNETICS_DELUGED_PORT and
+# MAGNETICS_JELLYFIN_URL, read by Commons, the defaults the live box's.
 #
 
 import sys

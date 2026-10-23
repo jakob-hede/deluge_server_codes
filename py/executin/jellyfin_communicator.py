@@ -1,5 +1,6 @@
 import requests
 
+from executin.commons import Commons
 from executin.logge import DelugapiTorrentorLoggor
 from salaisuudet.secrets import Secretor
 
@@ -10,8 +11,8 @@ class JellyfinCommunicator:
         self.app_name = Secretor.jellyfin_app_name
         self.api_key = Secretor.jellyfin_api_key
 
-        server_url_ronja = 'http://10.4.9.11:8096'
-        self.server_url = server_url_ronja
+        # the live box's Jellyfin unless the container's environment names another, read by Commons
+        self.server_url = Commons.singleton.jellyfin_url
 
         self.logger.exclaim(f"JellyfinCommunicator initialized with app name '{self.app_name}'")
 

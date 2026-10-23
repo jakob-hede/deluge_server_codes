@@ -22,8 +22,10 @@ class DelugapiClient:
         self.password = mediator['password']
         # self.user = 'sermin'
         # self.password = 'xyz'
-        self.ip = '10.4.9.12'
-        self.port = 58846
+        # the daemon's address, the live box's unless the container's environment names another, read by Commons
+        from executin.commons import Commons
+        self.ip = Commons.singleton.deluged_host
+        self.port = Commons.singleton.deluged_port
         self.api: DelugApi = DelugApi(host=self.ip, port=self.port, user=self.user, password=self.password)
         self.reaction_response: DelugApiResponse = DelugApiResponse()
 
