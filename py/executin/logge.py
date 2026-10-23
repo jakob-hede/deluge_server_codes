@@ -1,6 +1,6 @@
 import sys
 from enum import Enum
-from logging import Logger, NOTSET, DEBUG, _levelToName, _nameToLevel
+from logging import Logger, DEBUG, _levelToName, _nameToLevel
 from logging import FileHandler, StreamHandler, Formatter
 from pathlib import Path
 
@@ -178,22 +178,8 @@ class DelugapiTorrentorLoggor(Loggor):
         super().__init__(self.moniker, level=DEBUG)
 
 
-class ExecutorLoggor(Loggor):
-    def __init__(self):
-        self.moniker = 'executor'
-        super().__init__(self.moniker, level=DEBUG)
-
-
 class OceanorLoggor(Loggor):
     moniker = 'oceanic_action'
-
-
-class StatusorLoggor(Loggor):
-    moniker = 'statusor'
-
-    # def __init__(self):
-    #     self.moniker = 'statusor'
-    #     super().__init__(self.moniker, level=DEBUG)
 
 
 class TestLoggor(Loggor):

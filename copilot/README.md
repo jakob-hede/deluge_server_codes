@@ -101,7 +101,7 @@ docker exec deluge find /deluge/torrents -name "*.torrent" -exec python3 /codes/
 
 ### Integration with Deluge
 Since the `/codes` directory is mounted, these tools are accessible from within the Deluge container and can be used in:
-- Execute plugin scripts
+- Execute plugin scripts, retired: Oceanic's `oceanic_plugin/oceanic.sh` and its hook in `py/oceanin/` hear the daemon now
 - Custom Deluge plugins
 - Automated torrent processing workflows
 - Post-download scripts

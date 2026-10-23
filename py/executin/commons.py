@@ -30,11 +30,6 @@ class TransactionException(ExecutinException):
     pass
 
 
-class ExecutorException(ExecutinException):
-    """Exception raised for executor errors in the Executin module."""
-    pass
-
-
 class Commons:
     singleton: Commons | None = None
     deluge_root_dir: Path = Path('/deluge')

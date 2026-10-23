@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 #
-# Oceanic's runnor, beside Execute's executor.py. The shim oceanic_plugin/oceanic.sh runs it as
+# Oceanic's runnor, the one entry under py/runs/. The shim oceanic_plugin/oceanic.sh runs it as
 #   oceanor.py oce_<event> <torrent id> <torrent name> <location> [<detail>...]
 # and it hands the event to the hook, OceanicHook.process_event, the two logging to oceanic_action.log. Nothing
 # here speaks to the daemon, the removal trio's torrents having left it and every other event only logged: from
