@@ -45,25 +45,31 @@ class Testor:
             print("--- first call, the folder does not exist yet")
             first_paths = label_handler.write_sidecars(sidecar_dir)
             subprocess.run(['ls', '-la', str(sidecar_dir)])
+            subprocess.run(['ls', '-la', str(sidecar_dir / '.oceanmeta')])
             first_inodes = {path.name: path.stat().st_ino for path in first_paths}
-            leftovers = list(sidecar_dir.glob('.*.tmp'))
-            is_first_as_expected = [path.name for path in first_paths] == ['provenance.yml', 'movie.nfo'] and not leftovers
-            print(f"written: {[path.name for path in first_paths]}  .tmp left: {leftovers}  {is_first_as_expected}")
+            leftovers = list(sidecar_dir.rglob('.*.tmp'))
+            record_name = '00d1efbc6ebd63daabdfe9cbf50bfda49f0e942c.yml'
+            modes = {path.name: oct(path.stat().st_mode & 0o777) for path in [*first_paths, sidecar_dir / '.oceanmeta']}
+            is_first_as_expected = ([path.name for path in first_paths] == [record_name, 'movie.nfo']
+                                    and modes == {record_name: '0o666', 'movie.nfo': '0o666', '.oceanmeta': '0o777'}
+                                    and not leftovers)
+            print(f"written: {[path.name for path in first_paths]}  modes {modes}  .tmp left: {leftovers}  "
+                  f"{is_first_as_expected}")
 
             print("--- second call, overwrites both")
             label_handler._browser_source_data = {**florist_record, 'media_title': 'The Florist, rewritten'}
             second_paths = label_handler.write_sidecars(sidecar_dir)
             subprocess.run(['ls', '-la', str(sidecar_dir)])
             second_inodes = {path.name: path.stat().st_ino for path in second_paths}
-            leftovers = list(sidecar_dir.glob('.*.tmp'))
+            leftovers = list(sidecar_dir.rglob('.*.tmp'))
             nfo_text = (sidecar_dir / 'movie.nfo').read_text(encoding='utf-8')
-            provenance = yaml.safe_load((sidecar_dir / 'provenance.yml').read_text(encoding='utf-8'))
+            record = yaml.safe_load((sidecar_dir / '.oceanmeta' / record_name).read_text(encoding='utf-8'))
             is_replaced = all(second_inodes[name] != first_inodes[name] for name in first_inodes)
             is_rewritten = ('<title>The Florist, rewritten</title>' in nfo_text
-                            and provenance['click']['media_title'] == 'The Florist, rewritten')
+                            and record['click']['media_title'] == 'The Florist, rewritten')
             is_second_as_expected = is_replaced and is_rewritten and not leftovers
             print(f"inodes {first_inodes} -> {second_inodes}  replaced: {is_replaced}")
-            print(f"new title in movie.nfo and provenance.yml: {is_rewritten}  .tmp left: {leftovers}  {is_second_as_expected}")
+            print(f"new title in movie.nfo and the record: {is_rewritten}  .tmp left: {leftovers}  {is_second_as_expected}")
 
             print("--- an unwritable folder, mode 500")
             locked_dir = scratch_dir / 'locked'

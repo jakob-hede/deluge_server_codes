@@ -285,10 +285,9 @@ class Testor:
         self.step('link 3, the second: link 4, the sidecars and the move into movin', 'oce_file_renamed', '1',
                   file_plan[1][1], stage='moving', acts=[('move', self.movin)])
         folder = self.movin / 'the.florist.2026'
-        self.check('sidecars in the destination before the media', sorted(path.name for path in folder.iterdir()),
-                   ['movie.nfo', 'provenance.yml'])
-        self.check("the provenance's release name, as it came", self.provenance(folder).get('release_name'),
-                   self.yts_folder)
+        self.check('sidecars in the destination before the media, movie.nfo at the root, no provenance.yml',
+                   sorted(path.name for path in folder.iterdir()), ['.oceanmeta', 'movie.nfo'])
+        self.check_oceanmeta(folder, hashes=[self.torrent_id])
         self.step('link 3 re-fired after the move: nothing', 'oce_file_renamed', '1', file_plan[1][1], stage='moving')
         daemon.moved(self.movin)
         self.step('link 5, in movin: the refresh, the staging folder removed, the card', 'oce_storage_moved',
@@ -418,7 +417,10 @@ class Testor:
                                   'as released: **Tulsa King S04E01 1080p x265-ELiTE**', 'staged via .staging',
                                   '0.9 GB', f'hash **{self.torrent_id}**'],
                         'tags': ['white_check_mark', 'tv-in', 'warning', 'diverted'], 'priority': 'high'})
-        self.check('the season folder holds no sidecar', list(season.iterdir()), [])
+        self.check('the season folder holds the record and the survey, no movie.nfo',
+                   sorted(path.name for path in season.iterdir()), ['.oceanmeta'])
+        self.check_oceanmeta(season, hashes=[self.torrent_id], label='tv-in',
+                             release_name='Tulsa.King.S04E01.1080p.x265-ELiTE')
 
     def case_bare_movie_wrapped(self):
         name = 'The.Florist.2026.1080p.WEB-DL.mkv'
@@ -426,6 +428,9 @@ class Testor:
         self.torrentize(name, [name])
         self.lay_record(self.record)
         daemon = self.daemon = FakeDaemon(self.torrent_id, name, files, self.completed, 'movin', 1_900_000_000)
+        # a hybrid the daemon filed under its v2, its v1 kept from oce_added, which the record names beside the id
+        alternate = 'd1d96f75' * 5
+        self.classes['Stagor'](self.torrent_id).write(alternate_ids=[alternate])
         wrap = [(0, 'the.florist.2026/the.florist.2026.mkv')]
         self.step('entered, a bare movie file', 'oce_storage_moved', self.completed, stage='staging',
                   acts=[('move', self.staging)])
@@ -440,6 +445,7 @@ class Testor:
                   'oce_file_renamed', '0', wrap[0][1], stage='moving', acts=[('move', self.movin)])
         self.check('the destination at the move, flat, the wrap done', self.read_stage().get('destination'),
                    str(self.movin))
+        self.check_oceanmeta(self.movin / 'the.florist.2026', hashes=[self.torrent_id, alternate], release_name=name)
         daemon.moved(self.movin)
         self.step('in movin: the card says wrapped', 'oce_storage_moved', str(self.movin), stage='done',
                   card=self.completed_card('wrapped into **the.florist.2026/**', destination=self.movin))
@@ -604,11 +610,30 @@ class Testor:
         survey = yaml.safe_load((self.base / 'deluge' / 'surveys' / f'{self.torrent_id}.yml').read_text())
         return survey['torrent_data']['structure']['structure_type']
 
-    @staticmethod
-    def provenance(folder: Path) -> dict:
+    def check_oceanmeta(self, folder: Path, *, hashes: list[str], label: str = 'movin',
+                        release_name: str | None = None) -> None:
+        # the record and the survey as it came under .oceanmeta/, each named by the hash, the record's hashes and entry
         import yaml
 
-        return yaml.safe_load((folder / 'provenance.yml').read_text())
+        oceanmeta = folder / '.oceanmeta'
+        self.check(f"{self.shown(oceanmeta)} holds the record and the survey",
+                   sorted(path.name for path in oceanmeta.iterdir()),
+                   [f'{self.torrent_id}.survey.yml', f'{self.torrent_id}.yml'])
+        record_text = (oceanmeta / f'{self.torrent_id}.yml').read_text()
+        record = yaml.safe_load(record_text)
+        print('the record:')
+        for line in self.shown(record_text).splitlines():
+            print(f'  | {line}')
+        survey_text = (self.base / 'deluge' / 'surveys' / f'{self.torrent_id}.yml').read_text()
+        survey_copy = oceanmeta / f'{self.torrent_id}.survey.yml'
+        self.check("the record's hashes", record.get('hashes'), hashes)
+        self.check("the record's entry", record.get('entry'), 'storage_moved')
+        self.check("the record's label", record.get('label'), label)
+        self.check("the record's release name, as it came", record.get('release_name'), release_name or self.yts_folder)
+        self.check('the survey copied verbatim', survey_copy.exists() and survey_copy.read_text() == survey_text, True)
+        self.check('modes, the dot-directory and its files', sorted({oct(path.stat().st_mode & 0o777)
+                                                                     for path in [oceanmeta, *oceanmeta.iterdir()]}),
+                   ['0o666', '0o777'])
 
 
 def main():

@@ -82,8 +82,9 @@ class Testor:
             '  <uniqueid type="imdb" default="true">tt33214716</uniqueid>\n'
             '</movie>\n'
         )
-        provenance_keys = ['written', 'infohash', 'label', 'release_name', 'folder', 'renamed', 'destination',
-                           'orig_files', 'files', 'click']
+        record_keys = ['written', 'infohash', 'hashes', 'entry', 'label', 'release_name', 'folder', 'renamed',
+                       'destination', 'orig_files', 'files', 'click']
+        record_name = '.oceanmeta/00d1efbc6ebd63daabdfe9cbf50bfda49f0e942c.yml'
         movin_dir = '/ocean/video/movies/movin'
         # (case, name, files, orig_files, current_files, is_renamed, survey, record, expected sidecar_dir, expected nfo)
         cases = [
@@ -145,29 +146,32 @@ class Testor:
             print(f"sidecar files: {list(sidecar_files)}  movie.nfo as expected: {is_nfo_as_expected}")
             if nfo is not None:
                 print(nfo, end='')
-            provenance = yaml.safe_load(sidecar_files['provenance.yml'])
+            record = yaml.safe_load(sidecar_files[record_name])
             expected_click = {key: value for key, value in browser_source_data.items()
                               if key not in ('magnet', 'subtitles', 'extras')} if browser_source_data else None
-            is_provenance_as_expected = (
-                list(provenance) == provenance_keys
-                and provenance['infohash'] == delugapi_torrent.tid
-                and provenance['label'] == 'movin'
-                and provenance['release_name'] == name
-                and provenance['folder'] == label_handler.pattern_dir_name
-                and provenance['renamed'] is is_renamed
-                and provenance['destination'] == str(label_handler.destin_dir)
-                and provenance['orig_files'] == [file['path'] for file in orig_files]
-                and provenance['files'] == [file['path'] for file in (current_files if current_files is not None else files)]
-                and provenance['click'] == expected_click
+            is_record_as_expected = (
+                list(sidecar_files) == [record_name, *(['movie.nfo'] if expected_nfo is not None else [])]
+                and list(record) == record_keys
+                and record['infohash'] == delugapi_torrent.tid
+                and record['hashes'] == [delugapi_torrent.tid]
+                and record['entry'] is None
+                and record['label'] == 'movin'
+                and record['release_name'] == name
+                and record['folder'] == label_handler.pattern_dir_name
+                and record['renamed'] is is_renamed
+                and record['destination'] == str(label_handler.destin_dir)
+                and record['orig_files'] == [file['path'] for file in orig_files]
+                and record['files'] == [file['path'] for file in (current_files if current_files is not None else files)]
+                and record['click'] == expected_click
             )
-            print(f"provenance.yml keys: {list(provenance)}  as expected: {is_provenance_as_expected}")
-            print(f"  written {provenance['written']!r}  renamed {provenance['renamed']}  "
-                  f"release_name {provenance['release_name']!r}")
-            click = provenance['click']
+            print(f"record keys: {list(record)}  as expected: {is_record_as_expected}")
+            print(f"  written {record['written']!r}  renamed {record['renamed']}  "
+                  f"release_name {record['release_name']!r}")
+            click = record['click']
             print(f"  click: {None if click is None else list(click)}")
             if case_name == 'florist shape, renamed':
-                print(sidecar_files['provenance.yml'], end='')
-            all_as_expected = all_as_expected and is_dir_as_expected and is_nfo_as_expected and is_provenance_as_expected
+                print(sidecar_files[record_name], end='')
+            all_as_expected = all_as_expected and is_dir_as_expected and is_nfo_as_expected and is_record_as_expected
 
         print("--- sidecars that cannot be built, movie_nfo patched to raise")
 
@@ -214,9 +218,17 @@ class Testor:
             survey_data=survey('single_directory'),
             browser_source_data=florist_record,
         )
-        is_tv_as_expected = tv_handler.sidecar_dir is None and tv_handler.sidecar_files == {}
+        # the TV handlors write the record too, into the folder that will hold the largest file, under its season
+        tv_dir = f'/ocean/video/tv/the.florist/s00/{yts_folder}'
+        tv_files = tv_handler.sidecar_files
+        tv_record = yaml.safe_load(tv_files[record_name])
+        is_tv_as_expected = (str(tv_handler.sidecar_dir) == tv_dir and list(tv_files) == [record_name]
+                             and tv_record['label'] == 'tv-in' and tv_record['folder'] is None
+                             and tv_record['destination'] == '/ocean/video/tv/the.florist/s00')
         all_as_expected = all_as_expected and is_tv_as_expected
-        print(f"sidecar_dir: {tv_handler.sidecar_dir}  sidecar_files: {tv_handler.sidecar_files}  {is_tv_as_expected}")
+        print(f"sidecar_dir: {tv_handler.sidecar_dir}  expected '{tv_dir}'")
+        print(f"sidecar_files: {list(tv_files)}  label {tv_record['label']!r}  folder {tv_record['folder']!r}  "
+              f"destination {tv_record['destination']!r}  {is_tv_as_expected}")
         print(f"all as expected: {all_as_expected}")
 
 

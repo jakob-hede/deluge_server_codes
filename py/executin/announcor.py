@@ -85,7 +85,7 @@ class HookAnnouncor:
 
     def deleted(self, folder: str, outcome: str | None, jellyfin_told: bool | None, torrent_id: str, *,
                 record: dict | None = None, is_kept: bool = False) -> str | None:
-        """record: the click record from the folder's provenance.yml, None when there was none to read.
+        """record: the click record from the folder's record of the torrent, None when there was none to read.
         jellyfin_told: True told, False the call failed, None nothing deleted so nothing to tell.
         is_kept: a video survived the ticked delete, the one anomaly, so the card is warned and high always."""
         try:

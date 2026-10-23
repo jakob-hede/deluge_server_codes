@@ -54,10 +54,12 @@ class LineRecordor(logging.Handler):
 
 
 class Testor:
-    # what Jellyfin, the sidecars and a ticked delete leave behind in a movie folder
-    leftovers: list[str] = ['backdrop.jpg', 'folder.jpg', 'landscape.jpg', 'logo.png', 'movie.nfo', 'provenance.yml',
-                            'Subs/English.srt']
+    # what Jellyfin, the sidecars and a ticked delete leave behind in a movie folder, the torrent's record besides
+    leftovers: list[str] = ['backdrop.jpg', 'folder.jpg', 'landscape.jpg', 'logo.png', 'movie.nfo', 'Subs/English.srt']
     torrent_id = '0123456789abcdef0123456789abcdef01234567'
+    # a hybrid's other hash, and another torrent's
+    alternate_id = 'd1d96f75' * 5
+    other_id = 'fedcba98' * 5
 
     def __init__(self):
         super().__init__()
@@ -77,14 +79,30 @@ class Testor:
     def movin(self) -> Path:
         return self.libraries[0]
 
-    def lay_out(self, folder: Path, paths: list[str], click: dict | None = None) -> Path:
+    def lay_out(self, folder: Path, paths: list[str], click: dict | None = None,
+                record: str | None = 'oceanmeta') -> Path:
+        """record: the torrent's record the chain left, .oceanmeta/<id>.yml by default; 'alternate' one filed under a
+        hybrid's other hash naming this one among its hashes, 'legacy' a provenance.yml naming it, 'other' another
+        torrent's record, None none."""
+        import yaml
+
         for path in paths:
             file = folder / path
             file.parent.mkdir(parents=True, exist_ok=True)
             file.write_bytes(b'magnetics')
-        if click is not None:
-            lines = [f'  {key}: {value}' for key, value in click.items()]
-            (folder / 'provenance.yml').write_text('\n'.join(['click:', *lines, '']))
+        record_files = {
+            'oceanmeta': (f'.oceanmeta/{self.torrent_id}.yml',
+                          {'infohash': self.torrent_id, 'hashes': [self.torrent_id]}),
+            'alternate': (f'.oceanmeta/{self.alternate_id}.yml',
+                          {'infohash': self.alternate_id, 'hashes': [self.alternate_id, self.torrent_id]}),
+            'legacy': ('provenance.yml', {'infohash': self.torrent_id}),
+            'other': (f'.oceanmeta/{self.other_id}.yml', {'infohash': self.other_id, 'hashes': [self.other_id]}),
+        }
+        if record is not None:
+            name, content = record_files[record]
+            record_file = folder / name
+            record_file.parent.mkdir(parents=True, exist_ok=True)
+            record_file.write_text(yaml.safe_dump({**content, 'click': click}))
         return folder
 
     def hook(self, torrent_name: str, location: Path) -> OceanicHook:
@@ -286,6 +304,48 @@ class Testor:
         finally:
             shutil.rmtree = real_rmtree
 
+    # --- the folder's record of this torrent: by its id, by a hybrid's other hash, by a legacy provenance.yml, or none
+
+    def case_record_by_alternate(self):
+        # a hybrid filed under its other hash when the chain wrote its record; the record names both
+        folder = self.lay_out(self.movin / 'the.florist.2026', self.leftovers, record='alternate',
+                              click={'media_title': 'The Florist', 'media_year': 2026, 'media_type': 'movie'})
+        self.judge(self.hook('the.florist.2026', self.movin), 'oce_delete_failed', 'Directory not empty',
+                   branch='folder torrent', result=True, exists={folder: False},
+                   outcome='deleted with 7 files', leftovers=7, told=(folder,), scans=1,
+                   card={'title': 'DELETED: The Florist (2026)', 'first line': 'deleted with 7 files, jellyfin told',
+                         'tags': ['wastebasket'], 'priority': None})
+
+    def case_record_legacy(self):
+        # a folder from before the records, its provenance.yml naming this torrent
+        folder = self.lay_out(self.movin / 'the.florist.2026', self.leftovers, record='legacy',
+                              click={'media_title': 'The Florist', 'media_year': 2026, 'media_type': 'movie'})
+        self.judge(self.hook('the.florist.2026', self.movin), 'oce_delete_failed', 'Directory not empty',
+                   branch='folder torrent', result=True, exists={folder: False},
+                   outcome='deleted with 7 files', leftovers=7, told=(folder,), scans=1,
+                   card={'title': 'DELETED: The Florist (2026)', 'first line': 'deleted with 7 files, jellyfin told',
+                         'tags': ['wastebasket'], 'priority': None})
+
+    def case_no_record(self):
+        # nothing in the folder says it is this torrent's: kept for the hand, loudly, nothing scanned or told
+        folder = self.lay_out(self.movin / 'the.florist.2026', self.leftovers, record=None)
+        self.judge(self.hook('the.florist.2026', self.movin), 'oce_delete_failed', 'Directory not empty',
+                   branch='folder torrent', result=False, exists={folder: True, folder / 'movie.nfo': True},
+                   outcome='kept: no record of this torrent in the folder', scans=0,
+                   card={'title': 'DELETED: the florist 2026',
+                         'first line': 'kept: no record of this torrent in the folder',
+                         'tags': ['wastebasket', 'warning', 'diverted'], 'priority': 'high'})
+
+    def case_another_torrents_record(self):
+        # the folder is another torrent's: never emptied by this one
+        folder = self.lay_out(self.movin / 'the.florist.2026', self.leftovers, record='other')
+        self.judge(self.hook('the.florist.2026', self.movin), 'oce_deleted', None,
+                   branch='folder torrent', result=False, exists={folder: True},
+                   outcome='kept: no record of this torrent in the folder', scans=0,
+                   card={'title': 'DELETED: the florist 2026',
+                         'first line': 'kept: no record of this torrent in the folder',
+                         'tags': ['wastebasket', 'warning', 'diverted'], 'priority': 'high'})
+
     # --- the refusals: a log line, no card, nothing told
 
     def case_library_itself(self):
@@ -442,6 +502,10 @@ class Testor:
              self.case_permission_denied_video_present),
             ('the folder torrent: the Jellyfin call raises', self.case_jellyfin_refuses),
             ('the folder torrent: the deletion fails', self.case_deletion_fails),
+            ("the record by a hybrid's other hash, its hashes naming this one", self.case_record_by_alternate),
+            ('the record by a legacy provenance.yml naming this torrent', self.case_record_legacy),
+            ('no record of this torrent: kept, a high DELETED card', self.case_no_record),
+            ("another torrent's record: kept, a high DELETED card", self.case_another_torrents_record),
             ('refused: the library itself', self.case_library_itself),
             ('refused: a folder outside the library', self.case_outside_libraries),
             ('refused: a TV episode folder, outside the library', self.case_tv_episode_outside),

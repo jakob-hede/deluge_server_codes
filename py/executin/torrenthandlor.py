@@ -102,6 +102,12 @@ class TorrentLabelHandlor(TorrentHandlor):
     jelly_wrong_library_name: str = 'wrong-name'
     jelly_library_name: str = jelly_wrong_library_name
     current_files: list[dict] | None = None
+    # the torrent's own meta-files go under a dot-directory, which Jellyfin's scanner skips, named by its hash
+    oceanmeta_dir_name: str = '.oceanmeta'
+    # set by the hook for the record: the torrent's other hashes, the chain's entry, and the survey's text as it came
+    record_alternates: tuple[str, ...] = ()
+    record_entry: str | None = None
+    survey_text: str | None = None
 
     @classmethod
     def factory(cls, label: str, **kwargs) -> TorrentLabelHandlor | None:
@@ -135,15 +141,61 @@ class TorrentLabelHandlor(TorrentHandlor):
         return []
 
     @property
+    def latest_files(self) -> list[dict]:
+        # the daemon's files as last read: after a confirmed rename, else as fetched before it
+        return self.current_files if self.current_files is not None else self._delugapi_torrent.files
+
+    @property
     def sidecar_dir(self) -> Path | None:
-        return None
+        # the folder that will hold the largest file after the move, where Jellyfin puts its own files: a movie's
+        # folder, or a TV episode's season folder
+        files = self.latest_files
+        if not files:
+            self.logger.info("No sidecar folder, torrent has no files")
+            return None
+        largest_file = max(files, key=lambda file: file.get('size', 0))
+        return self.destin_dir / Path(largest_file['path']).parent
 
     @property
     def sidecar_files(self) -> dict[str, str]:
-        return {}
+        # the torrent's record and its survey as it came, under the dot-directory, each named by its hash, so a season
+        # folder fed by many torrents holds each one's
+        oceanmeta = f'{self.oceanmeta_dir_name}/{self.torrent_id}'
+        sidecar_files = {f'{oceanmeta}.yml': self.oceanmeta_yml}
+        if self.survey_text is None:
+            self.logger.info(f"Sidecars {list(sidecar_files)}, no survey to copy beside the record")
+        else:
+            sidecar_files[f'{oceanmeta}.survey.yml'] = self.survey_text
+        return sidecar_files
+
+    @property
+    def oceanmeta_yml(self) -> str:
+        # what the folder holds and where it came from, the hashes the torrent is known by first
+        browser_source_data = self._browser_source_data
+        # the record's magnet, subtitles and extras are long and stay in the record itself
+        click = {key: value for key, value in browser_source_data.items()
+                 if key not in ('magnet', 'subtitles', 'extras')} if browser_source_data else None
+        hashes = [self.torrent_id, *(alternate for alternate in self.record_alternates if alternate != self.torrent_id)]
+        record = {
+            'written': datetime.now().astimezone().isoformat(timespec='seconds'),
+            'infohash': self.torrent_id,
+            'hashes': hashes,
+            'entry': self.record_entry,
+            'label': self.label,
+            'release_name': self._delugapi_torrent.name,  # as fetched before the rename
+            'folder': getattr(self, 'pattern_dir_name', None),
+            'renamed': self.is_renamed,
+            'destination': str(self.destin_dir),
+            'orig_files': [file['path'] for file in self._delugapi_torrent.orig_files],
+            'files': [file['path'] for file in self.latest_files],
+            'click': click,
+        }
+        return yaml.safe_dump(record, sort_keys=False, allow_unicode=True)
 
     def write_sidecars(self, sidecar_dir: Path) -> list[Path]:
-        # a sidecar that cannot be built or written is logged and skipped, it never blocks the move
+        # a sidecar that cannot be built or written is logged and skipped, it never blocks the move; a name with a
+        # directory part gets its directory, mode 777 as the folder is, and every file is 666, so Jellyfin and the
+        # hand can change them as their own
         sidecar_paths: list[Path] = []
         try:
             sidecar_files = self.sidecar_files
@@ -157,9 +209,13 @@ class TorrentLabelHandlor(TorrentHandlor):
             return sidecar_paths
         for name, content in sidecar_files.items():
             sidecar_path = sidecar_dir / name
-            tmp_path = sidecar_dir / f'.{name}.{os.getpid()}.tmp'
+            tmp_path = sidecar_path.parent / f'.{sidecar_path.name}.{os.getpid()}.tmp'
             try:
+                if sidecar_path.parent != sidecar_dir:
+                    sidecar_path.parent.mkdir(parents=True, exist_ok=True)
+                    sidecar_path.parent.chmod(0o777)
                 tmp_path.write_text(content, encoding='utf-8')
+                tmp_path.chmod(0o666)
                 os.replace(tmp_path, sidecar_path)
             except OSError as exc:
                 self.logger.error(f"Sidecar not written: '{sidecar_path}', {exc}")
@@ -360,27 +416,13 @@ class TorrentHandlorMovin(TorrentLabelHandlor):
         return dest_dir
 
     @property
-    def latest_files(self) -> list[dict]:
-        # the daemon's files as last read: after a confirmed rename, else as fetched before it
-        return self.current_files if self.current_files is not None else self._delugapi_torrent.files
-
-    @property
-    def sidecar_dir(self) -> Path | None:
-        # the folder that will hold the largest file after the move, where Jellyfin puts its own files
-        files = self.latest_files
-        if not files:
-            self.logger.info("No sidecar folder, torrent has no files")
-            return None
-        largest_file = max(files, key=lambda file: file.get('size', 0))
-        return self.destin_dir / Path(largest_file['path']).parent
-
-    @property
     def sidecar_files(self) -> dict[str, str]:
+        # the record and the survey, and movie.nfo at the folder's root, where Jellyfin reads it, for a movie record
         browser_source_data = self._browser_source_data
         media_type = browser_source_data.get('media_type') if browser_source_data else None
         media_title = browser_source_data.get('media_title') if browser_source_data else None
         has_id = bool(browser_source_data.get('imdb_id') or browser_source_data.get('tmdb_id')) if browser_source_data else False
-        sidecar_files = {'provenance.yml': self.provenance_yml}
+        sidecar_files = super().sidecar_files
         if not browser_source_data:
             self.logger.info(f"Sidecars {list(sidecar_files)}, no movie.nfo, no browser-source record")
         elif media_type != 'movie':
@@ -416,26 +458,6 @@ class TorrentHandlorMovin(TorrentLabelHandlor):
         ET.indent(movie, space='  ')
         movie_xml = ET.tostring(movie, encoding='unicode')
         return f'<?xml version="1.0" encoding="utf-8" standalone="yes"?>\n{movie_xml}\n'
-
-    @property
-    def provenance_yml(self) -> str:
-        browser_source_data = self._browser_source_data
-        # the record's magnet, subtitles and extras are long and stay in the record itself
-        click = {key: value for key, value in browser_source_data.items()
-                 if key not in ('magnet', 'subtitles', 'extras')} if browser_source_data else None
-        provenance = {
-            'written': datetime.now().astimezone().isoformat(timespec='seconds'),
-            'infohash': self.torrent_id,
-            'label': self.label,
-            'release_name': self._delugapi_torrent.name,  # as fetched before the rename
-            'folder': self.pattern_dir_name,
-            'renamed': self.is_renamed,
-            'destination': str(self.destin_dir),
-            'orig_files': [file['path'] for file in self._delugapi_torrent.orig_files],
-            'files': [file['path'] for file in self.latest_files],
-            'click': click,
-        }
-        return yaml.safe_dump(provenance, sort_keys=False, allow_unicode=True)
 
 
 class TorrentHandlorTvin(TorrentLabelHandlor):

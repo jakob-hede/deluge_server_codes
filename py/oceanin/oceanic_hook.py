@@ -18,11 +18,12 @@ class OceanicHook:
     """
     Oceanic's hook, which the runnor, oceanor.py, hands every oce_ event, the two logging to oceanic_action.log, and
     the one gate: the plugin spawns for every hearing it has. A ticked delete acts: oce_deleted and oce_delete_failed
-    clean the payload's folder in the movin library, tell Jellyfin, and say so in one DELETED card. The added path
-    acts: oce_added sets the label the click's hint names and writes the survey when the daemon's copy of the torrent
-    is there, oce_metadata_received writes it when it is not yet, and oce_metadata_failed says so in one FAILED card,
-    all through the old Torrentor, its own lines in torrentor.log and the outcome here; a hybrid's v1 hash, when the
-    daemon files it under its v2, comes with oce_added to find the click's record by. The completion chain acts: a
+    clean the payload's folder in the movin library when it holds the torrent's record, tell Jellyfin, and say so in
+    one DELETED card. The added path acts: oce_added sets the label the click's hint names and writes the survey when
+    the daemon's copy of the torrent is there, oce_metadata_received writes it when it is not yet, and
+    oce_metadata_failed says so in one FAILED card, all through the old Torrentor, its own lines in torrentor.log and
+    the outcome here; a hybrid's v1 hash, when the daemon files it under its v2, comes with oce_added to find the
+    click's record by. The completion chain acts: a
     torrent Deluge has moved into completed/ is staged on the libraries' disk, renamed there, given its sidecars,
     moved into its library and refreshed, one act per run, each run woken by the daemon's event for the act before,
     oce_storage_moved, oce_folder_renamed and oce_file_renamed, and its failures, oce_storage_moved_failed and
@@ -266,9 +267,10 @@ class OceanicHook:
     def clean_payload(self, event_name: str, error: str | None = None, *,
                       libraries: tuple[Path, ...] | None = None) -> bool:
         """
-        A ticked delete's aftercare, the disk its one witness: the payload's folder found, held to the movie
-        libraries, scanned once for a video, removed when none is left, Jellyfin told, one card. True when the folder
-        is gone, with the delete or by the hook; False when it is kept, or refused, which is a log line and no card.
+        A ticked delete's aftercare, the folder's record and the disk its witnesses: the payload's folder found, held
+        to the movie libraries, asked for this torrent's record, scanned once for a video, removed when none is left,
+        Jellyfin told, one card. True when the folder is gone, with the delete or by the hook; False when it is kept,
+        with its card, or refused, which is a log line and no card.
         """
         self.remove_outcome = None
         self.remove_leftovers = None
@@ -342,7 +344,12 @@ class OceanicHook:
     def clean_folder(self, event_name: str, error: str | None, folder: Path, library: Path) -> bool:
         from executin.extensions import video_extensions
 
-        record = self.click_record(folder)
+        # the folder must hold this torrent's record before anything in it is removed; a folder gone with the delete
+        # has nothing left to ask, and nothing left to remove
+        torrent_record = self.torrent_record(folder)
+        if torrent_record is None and folder.exists():
+            return self.keep_unrecorded(folder)
+        record = torrent_record.get('click') if torrent_record else None
         self.announcor.record = record
         self.stage = 'scan'
         is_gone = False
@@ -404,15 +411,50 @@ class OceanicHook:
                 self.announcor.note(f"parent {self.announcor.bold(f'{parent.name}/')} holds no video, left for the operator's hand")
         return True
 
-    def click_record(self, folder: Path) -> dict | None:
-        # the click record in the folder's provenance names the card; read before anything is removed, fail-open
+    def torrent_record(self, folder: Path, alternates: tuple[str, ...] = ()) -> dict | None:
+        """
+        The folder's record of this torrent, which says the folder is its: .oceanmeta/<id>.yml, then an alternate's,
+        then any record there whose hashes name it, a hybrid's filed under its other hash; then a legacy provenance.yml
+        whose infohash is it. None when the folder holds none. Its click record names the card; read before anything
+        is removed, fail-open.
+        """
+        ids = (self.torrent_id, *alternates)
+        oceanmeta_dir = folder / '.oceanmeta'
+        for torrent_id in ids:
+            record = self.read_record(oceanmeta_dir / f'{torrent_id}.yml')
+            if record is not None:
+                return record
+        for record_path in sorted(oceanmeta_dir.glob('*.yml')):
+            if record_path.name.endswith('.survey.yml'):
+                continue
+            record = self.read_record(record_path)
+            if record is not None and any(str(name).lower() in ids for name in record.get('hashes') or []):
+                return record
+        legacy_record = self.read_record(folder / 'provenance.yml')
+        if legacy_record is not None and str(legacy_record.get('infohash', '')).lower() in ids:
+            return legacy_record
+        return None
+
+    @staticmethod
+    def read_record(record_path: Path) -> dict | None:
         try:
             import yaml
 
-            provenance = yaml.safe_load((folder / 'provenance.yml').read_text())
+            record = yaml.safe_load(record_path.read_text())
         except Exception:
             return None
-        return provenance.get('click') if isinstance(provenance, dict) else None
+        return record if isinstance(record, dict) else None
+
+    def keep_unrecorded(self, folder: Path) -> bool:
+        # a folder that does not say it is this torrent's is never emptied by it: kept, and loudly, since the operator
+        # ticked a delete in his library and nothing happened
+        self.loggor.info(f"no record of this torrent in '{folder}', kept for the hand")
+        self.remove_outcome = 'kept: no record of this torrent in the folder'
+        self.stage = 'card'
+        announced = self.announcor.deleted(str(folder), self.remove_outcome, None, self.torrent_id, is_kept=True)
+        if announced:
+            self.loggor.info(f'Announced {announced}')
+        return False
 
     def tell_jellyfin(self, folder: Path) -> bool:
         # Jellyfin is told the one path, never asked to delete an item, which deletes the files too; fail-open
@@ -644,6 +686,12 @@ class OceanicHook:
         if pattern_dir is not None and pattern_dir.exists():
             stage = self.note(stage, f'pattern folder {self.announcor.bold(f"{pattern_dir.name}/")} already existed, '
                                      f'its files not replaced')
+        # the record names the torrent by every hash it is known by and says how the chain met it; the survey rides
+        # beside it as it came
+        handlor.record_alternates = tuple(stage.get('alternate_ids') or ())
+        handlor.record_entry = stage.get('entry')
+        survey_file = self.torrentor.survey_file
+        handlor.survey_text = survey_file.read_text() if survey_file.exists() else None
         sidecar_dir = handlor.sidecar_dir
         if sidecar_dir is not None and not handlor.write_sidecars(sidecar_dir):
             stage = self.note(stage, 'no sidecar written')
