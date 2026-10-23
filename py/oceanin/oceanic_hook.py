@@ -11,10 +11,13 @@ if TYPE_CHECKING:
 
 class OceanicHook:
     """
-    Oceanic's hook, which the runnor, oceanor.py, hands every oce_ event, the two logging to oceanic_action.log. A
-    ticked delete acts: oce_deleted and oce_delete_failed clean the payload's folder in the movin library, tell
-    Jellyfin, and say so in one DELETED card; oce_removed, which every remove ends in, only logs. Only pathlib and
-    the loggor are imported here: shutil, whose
+    Oceanic's hook, which the runnor, oceanor.py, hands every oce_ event, the two logging to oceanic_action.log, and
+    the one gate: the plugin spawns for every hearing it has. A ticked delete acts: oce_deleted and oce_delete_failed
+    clean the payload's folder in the movin library, tell Jellyfin, and say so in one DELETED card. Every other event
+    only logs, one line with its details: oce_removed, which every remove ends in, and the nine the plugin hears for
+    phase 4, oce_added, oce_finished, oce_folder_renamed, oce_file_renamed, oce_metadata_received,
+    oce_metadata_failed, oce_storage_moved, oce_storage_moved_failed and oce_file_rename_failed, whose lines are its
+    material while Execute still does the work. Only pathlib and the loggor are imported here: shutil, whose
     compression modules weigh most of a megabyte, yaml, the announcor, the Jellyfin communicator and the video
     suffixes are imported inside the methods that act, when they act, so a plain remove costs the interpreter and a
     log line.
@@ -55,12 +58,70 @@ class OceanicHook:
             return self.on_deleted()
         elif event_name == 'oce_delete_failed':
             return self.on_delete_failed(*extras)
+        elif event_name == 'oce_added':
+            return self.on_added(*extras)
+        elif event_name == 'oce_finished':
+            return self.on_finished(*extras)
+        elif event_name == 'oce_folder_renamed':
+            return self.on_folder_renamed(*extras)
+        elif event_name == 'oce_file_renamed':
+            return self.on_file_renamed(*extras)
+        elif event_name == 'oce_metadata_received':
+            return self.on_metadata_received(*extras)
+        elif event_name == 'oce_metadata_failed':
+            return self.on_metadata_failed(*extras)
+        elif event_name == 'oce_storage_moved':
+            return self.on_storage_moved(*extras)
+        elif event_name == 'oce_storage_moved_failed':
+            return self.on_storage_moved_failed(*extras)
+        elif event_name == 'oce_file_rename_failed':
+            return self.on_file_rename_failed(*extras)
         self.loggor.error(f"Unknown event: '{event_name}' for torrent '{self.torrent_name}' ({self.torrent_id})")
         return None
 
     def on_removed(self) -> bool:
         # every remove ends here, ticked or not; what a ticked one did to the disk is the delete events' to tell
         self.loggor.info(f"Torrent '{self.torrent_name}' removed, id '{self.torrent_id}', location '{self.base_sdir}'")
+        return True
+
+    # --- the hearings that only log, phase 4's material; Execute's added and completed rows still do the work
+
+    def on_added(self, *details: str) -> bool:
+        return self.log_hearing('oce_added', details)
+
+    def on_finished(self, *details: str) -> bool:
+        return self.log_hearing('oce_finished', details)
+
+    def on_folder_renamed(self, *details: str) -> bool:
+        # the details: the folder's old name and its new
+        return self.log_hearing('oce_folder_renamed', details)
+
+    def on_file_renamed(self, *details: str) -> bool:
+        # the details: the file's index and its new name
+        return self.log_hearing('oce_file_renamed', details)
+
+    def on_metadata_received(self, *details: str) -> bool:
+        return self.log_hearing('oce_metadata_received', details)
+
+    def on_metadata_failed(self, *details: str) -> bool:
+        # the details: the error's text
+        return self.log_hearing('oce_metadata_failed', details)
+
+    def on_storage_moved(self, *details: str) -> bool:
+        # the details: the path the storage moved to
+        return self.log_hearing('oce_storage_moved', details)
+
+    def on_storage_moved_failed(self, *details: str) -> bool:
+        # the details: the error's text, and the file's path when the error had one
+        return self.log_hearing('oce_storage_moved_failed', details)
+
+    def on_file_rename_failed(self, *details: str) -> bool:
+        # the details: the file's index and the error's text
+        return self.log_hearing('oce_file_rename_failed', details)
+
+    def log_hearing(self, event_name: str, details: tuple[str, ...]) -> bool:
+        self.loggor.info(f"Torrent '{self.torrent_name}' {event_name}, id '{self.torrent_id}', "
+                         f"location '{self.base_sdir}', details {list(details)}")
         return True
 
     def on_deleted(self) -> bool:

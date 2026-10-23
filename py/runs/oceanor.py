@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 #
 # Oceanic's runnor, beside Execute's executor.py. The shim oceanic_plugin/oceanic.sh runs it as
-#   oceanor.py oce_<event> <torrent id> <torrent name> <location> [<detail>]
-# and it hands the event to the hook, OceanicHook.process_event, the two logging to oceanic_action.log. A torrent
-# the plugin speaks of has left the daemon, so nothing here speaks to it: from executin only the loggor, nothing
-# from delugapi or twisted.
+#   oceanor.py oce_<event> <torrent id> <torrent name> <location> [<detail>...]
+# and it hands the event to the hook, OceanicHook.process_event, the two logging to oceanic_action.log. Nothing
+# here speaks to the daemon, the removal trio's torrents having left it and every other event only logged: from
+# executin only the loggor, nothing from delugapi or twisted.
 #
 
 import sys
@@ -20,8 +20,8 @@ class Oceanor:
         self.args: list[str] = list(sys.argv[1:] if argv is None else argv)
 
     def oceanize(self) -> int:
-        if not 4 <= len(self.args) <= 5:
-            self.loggor.error(f'Oceanor.oceanize takes 4 or 5 arguments, got {len(self.args)}, nothing run: '
+        if len(self.args) < 4:
+            self.loggor.error(f'Oceanor.oceanize takes 4 or more arguments, got {len(self.args)}, nothing run: '
                               f'{self.args}')
             return 1
         event_name, torrent_id, torrent_name, base_sdir, *detail = self.args
