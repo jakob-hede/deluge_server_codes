@@ -99,10 +99,12 @@ class Testor:
 
     def judge(self, event_name: str, torrent_name: str, details: tuple[str, ...], *, result: bool, labels: int,
               survey_event: str | None, lines: list[tuple[str, str]], card: dict | None = None,
-              is_torrentor_loaded: bool = True, survey_text: str | None = None, record_read: str | None = None):
+              is_torrentor_loaded: bool = True, survey_text: str | None = None, record_read: str | None = None,
+              stage: dict | None = None):
         """survey_event: the event the survey names once the case ran, None for no survey; survey_text: the survey's
         text as it must stand, for a survey the case laid down itself; record_read: the browser-source record the
-        label would read, by default the torrent id's whenever the label runs."""
+        label would read, by default the torrent id's whenever the label runs; stage: the keys stage.yml must hold
+        after the case, None for no stage file."""
         hook = OceanicHook(self.torrent_id, torrent_name, self.location, self.loggor)
         self.recordor.lines.clear()
         self.label_calls.clear()
@@ -148,6 +150,18 @@ class Testor:
             for key, expected_value in expected_card.items():
                 print(f"card {key}: {got_card.get(key)!r}  expected {expected_value!r}")
             is_as_expected = is_as_expected and got_card == expected_card
+        stage_file = self.base / 'staging' / self.torrent_id / 'stage.yml'
+        if stage is None:
+            is_staged = not stage_file.exists()
+            print(f"no stage file: {is_staged}  expected True")
+        else:
+            import yaml
+
+            got_stage = yaml.safe_load(stage_file.read_text()) if stage_file.exists() else {}
+            got_keys = {key: got_stage.get(key) for key in stage}
+            is_staged = got_keys == stage
+            print(f"stage: {got_keys}  expected {stage}")
+        is_as_expected = is_as_expected and is_staged
         is_loaded = hook._torrentor is not None
         print(f"the Torrentor loaded: {is_loaded}  expected {is_torrentor_loaded}")
         is_as_expected = is_as_expected and is_loaded == is_torrentor_loaded
@@ -232,7 +246,7 @@ class Testor:
         name = self.release_name
         details = (self.v1_id,)
         self.judge('oce_added', name, details, result=True, labels=1, survey_event='oce_added',
-                   record_read=f'{self.v1_id}.yml',
+                   record_read=f'{self.v1_id}.yml', stage={'alternate_ids': [self.v1_id], 'stage': None},
                    lines=[self.hearing_line('oce_added', name, details),
                           ('INFO', f"Browser-source record of '{name}' looked for by '{self.torrent_id}', "
                                    f"then by '{self.v1_id}'"),
@@ -247,7 +261,7 @@ class Testor:
         name = self.release_name
         details = (self.v1_id,)
         self.judge('oce_added', name, details, result=True, labels=1, survey_event='oce_added',
-                   record_read=f'{self.torrent_id}.yml',
+                   record_read=f'{self.torrent_id}.yml', stage={'alternate_ids': [self.v1_id], 'stage': None},
                    lines=[self.hearing_line('oce_added', name, details),
                           ('INFO', f"Browser-source record of '{name}' looked for by '{self.torrent_id}', "
                                    f"then by '{self.v1_id}'"),
@@ -282,6 +296,43 @@ class Testor:
                           ('WARNING', f"No torrent file for '{name}' in '{self.torrents_dir}', "
                                       f"no survey written, left for the completion")])
 
+    def unhandled_card(self) -> dict:
+        return {'title': 'UNHANDLED: The Florist 2026 1080p WEBRip x265-GRP',
+                'lines': ['hybrid torrent, Deluge cannot track it', 'left in **downloads**',
+                          'remove it, or wait for the Deluge patch', f'hash **{self.torrent_id}**'],
+                'tags': ['x'], 'priority': 'high'}
+
+    def case_metadata_hybrid(self):
+        # a hybrid's metadata, which Deluge's handler missed: the survey from the copy the plugin's repair wrote, one
+        # UNHANDLED card, stage unhandled
+        self.torrentize()
+        name = self.release_name
+        details = ('deluge_missed',)
+        self.judge('oce_metadata_received', name, details, result=True, labels=0, survey_event='oce_metadata_received',
+                   lines=[self.hearing_line('oce_metadata_received', name, details),
+                          self.survey_line('oce_metadata_received', name), ('INFO', 'Announced stub1')],
+                   card=self.unhandled_card(),
+                   stage={'stage': 'unhandled', 'entry': 'metadata_received', 'deluge': 'missed'})
+
+    def case_hybrid_no_second_card(self):
+        # the same hybrid again, its metadata at a daemon start, then its raw finish: a log line each, no card
+        self.torrentize()
+        self.case_metadata_hybrid()
+        name = self.release_name
+        details = ('deluge_missed',)
+        print('... its metadata again')
+        self.judge('oce_metadata_received', name, details, result=True, labels=0, survey_event='oce_metadata_received',
+                   lines=[self.hearing_line('oce_metadata_received', name, details),
+                          ('INFO', f"Survey of '{name}' already there, '{self.survey_file}', nothing written"),
+                          ('INFO', f"Chain of '{name}': oce_metadata_received at stage 'unhandled', nothing to do")],
+                   stage={'stage': 'unhandled', 'entry': 'metadata_received'})
+        print('... its raw finish')
+        self.judge('oce_torrent_finished', name, details, result=True, labels=0, survey_event='oce_metadata_received',
+                   is_torrentor_loaded=False,
+                   lines=[self.hearing_line('oce_torrent_finished', name, details),
+                          ('INFO', f"Chain of '{name}': oce_torrent_finished at stage 'unhandled', nothing to do")],
+                   stage={'stage': 'unhandled', 'entry': 'metadata_received'})
+
     # --- oce_metadata_failed
 
     def case_metadata_failed(self):
@@ -309,6 +360,10 @@ class Testor:
              self.case_metadata_copy_there),
             ('oce_metadata_received, the survey already there: nothing written', self.case_metadata_survey_there),
             ('oce_metadata_received, no copy: a warning, nothing written, False', self.case_metadata_no_copy),
+            ('oce_metadata_received of a hybrid Deluge missed: the survey, one UNHANDLED card, stage unhandled',
+             self.case_metadata_hybrid),
+            ('a hybrid already unhandled: its metadata again and its raw finish each a log line, no second card',
+             self.case_hybrid_no_second_card),
             ('oce_metadata_failed: one FAILED card, the error and the hash, high, no Torrentor',
              self.case_metadata_failed),
         ]
@@ -341,8 +396,15 @@ def main():
     # thing here that talks to the daemon, is stood in for by the Testor
     emitting_module.NtfyAnnouncor = RecordingNtfyAnnouncor
     from executin.torrentor import Torrentor
+    from oceanin.stagor import Stagor
 
     executor = Testor(Torrentor)
+    # the hybrid's card and stage are the daemon's hook's, so the testor stands at the daemon
+    from executin.commons import Commons
+
+    Commons.singleton.is_at_daemon = True
+    # the stage files under the case's own tree, as the Torrentor's dirs are
+    Stagor.default_staging_dir = staticmethod(lambda: executor.base / 'staging')
     executor.all_as_expected = not loaded
     executor.executize()
 

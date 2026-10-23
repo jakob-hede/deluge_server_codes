@@ -377,8 +377,8 @@ class Testor:
         self.all_as_expected = self.all_as_expected and is_quiet
 
     def case_logging(self, event_name: str, *details: str):
-        # a hearing that only logs, the completion chain's material: one line with every detail, True, the disk
-        # untouched, no voice and no Torrentor
+        # a hearing that only logs, Deluge's own finish and a raw finish with no detail: one line with every detail,
+        # True, the disk untouched, no voice and no Torrentor
         folder = self.lay_out(self.movin / 'the.florist.2026', self.leftovers + ['the.florist.2026.mkv'])
         hook = self.hook('the.florist.2026', self.movin)
         self.recordor.lines.clear()
@@ -458,17 +458,6 @@ class Testor:
             ('logs only: oce_finished, no detail', lambda: self.case_logging('oce_finished')),
             ("logs only: oce_torrent_finished, libtorrent's raw finish, no detail",
              lambda: self.case_logging('oce_torrent_finished')),
-            ('logs only: oce_folder_renamed, the old name and the new',
-             lambda: self.case_logging('oce_folder_renamed', 'The.Florist.2026.1080p/', 'the.florist.2026/')),
-            ('logs only: oce_file_renamed, the index and the new name',
-             lambda: self.case_logging('oce_file_renamed', '0', 'the.florist.2026/the.florist.2026.mkv')),
-            ('logs only: oce_storage_moved, the new path',
-             lambda: self.case_logging('oce_storage_moved', str(self.movin))),
-            ("logs only: oce_storage_moved_failed, the error's text and the file's path",
-             lambda: self.case_logging('oce_storage_moved_failed', 'Permission denied',
-                                       str(self.movin / 'the.florist.2026' / 'the.florist.2026.mkv'))),
-            ("logs only: oce_file_rename_failed, the index and the error's text",
-             lambda: self.case_logging('oce_file_rename_failed', '1', 'File exists')),
         ]
         real_rglob = Path.rglob
         real_sleep = time.sleep

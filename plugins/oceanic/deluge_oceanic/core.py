@@ -81,13 +81,14 @@ class Core(CorePluginBase):
     which hands the event to the hook, and the hook is the one gate: all policy lives there. A hybrid v1/v2 torrent
     has two hashes, and libtorrent 2.0 names its alerts by the v2 one truncated while Deluge files a magnet add under
     the v1, so a handle-based alert is resolved to Deluge's id by either hash, and the metadata Deluge's own handler
-    then missed is repaired here, the one line of Deluge's work the plugin does. An alert handler has two seconds
+    then missed is repaired here, the one line of Deluge's work the plugin does; the raw finish says whether
+    Deluge's own handler found the torrent. An alert handler has two seconds
     before the alert manager gives up on it, so nothing here blocks, sleeps or waits: the shim is spawned and its end
     is a callback. Deluge's own log is not read on this box, so no handler raises: a failure is one line in the
     plugin's log.
     """
 
-    plugin_version: ClassVar[str] = '0.4'
+    plugin_version: ClassVar[str] = '0.5'
     # the plugin's log is no setting, since Deluge loads oceanic.conf over the defaults: the log_file key an
     # oceanic.conf written by 0.1 carries is read by nothing
     log_file: ClassVar[str] = '/deluge/log/oceanic_plugin.log'
@@ -230,11 +231,12 @@ class Core(CorePluginBase):
 
     def on_metadata_received(self, alert: Any) -> None:
         try:
-            # after Deluge's own handler, which has written the .torrent unless it missed a hybrid; a magnet's prefetch
-            # torrent is in no session
+            # after Deluge's own handler, which has written the .torrent unless it missed a hybrid, which the one detail
+            # says, as on the raw finish; a magnet's prefetch torrent is in no session
             ids = self.live_ids(alert.handle)
-            self.log_line(f"{alert.what()} {ids} name '{alert.torrent_name}'")
-            self.run_handle_command('metadata_received', ids.torrent_id, alert.handle)
+            deluge = self.deluge_word(alert.handle)
+            self.log_line(f"{alert.what()} {ids} name '{alert.torrent_name}' {deluge}")
+            self.run_handle_command('metadata_received', ids.torrent_id, alert.handle, deluge)
         except Exception as exc:
             self.log_failure('on_metadata_received', exc)
 
@@ -286,10 +288,12 @@ class Core(CorePluginBase):
     def on_torrent_finished_alert(self, alert: Any) -> None:
         try:
             # libtorrent's own finish, which Deluge's handler misses for a hybrid added bare, so no move_completed and
-            # no TorrentFinishedEvent follow for it; posted too for a torrent added complete or rechecked complete
+            # no TorrentFinishedEvent follow for it; posted too for a torrent added complete or rechecked complete. The
+            # one detail says which, Deluge's handler looking the torrent up by the alert's own hash
             ids = self.live_ids(alert.handle)
-            self.log_line(f"{alert.what()} {ids} name '{alert.torrent_name}'")
-            self.run_handle_command('torrent_finished', ids.torrent_id, alert.handle)
+            deluge = self.deluge_word(alert.handle)
+            self.log_line(f"{alert.what()} {ids} name '{alert.torrent_name}' {deluge}")
+            self.run_handle_command('torrent_finished', ids.torrent_id, alert.handle, deluge)
         except Exception as exc:
             self.log_failure('on_torrent_finished_alert', exc)
 
@@ -305,6 +309,12 @@ class Core(CorePluginBase):
 
     def torrent_id_for(self, handle: Any) -> str:
         return self.live_ids(handle).torrent_id
+
+    @staticmethod
+    def deluge_word(handle: Any) -> str:
+        # whether Deluge's own handler of the alert found the torrent: the lookup it makes, by the handle's own hash
+        is_handled = str(handle.info_hash()) in component.get('TorrentManager').torrents
+        return 'deluge_handled' if is_handled else 'deluge_missed'
 
     def run_handle_command(self, event: str, torrent_id: str, handle: Any, *detail: str) -> None:
         # a handle-based hearing's command, its torrent's missed metadata repaired first

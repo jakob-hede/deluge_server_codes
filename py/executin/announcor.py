@@ -67,13 +67,16 @@ class HookAnnouncor:
     def completed(self, delugapi_torrent: DelugapiTorrent, label_handler: TorrentLabelHandlor | None = None, *,
                   browser_source_data: dict | None = None, destination: str | None = None,
                   refreshed: bool | None = None, not_moved: str | None = None,
-                  already_named: bool = False) -> str | None:
-        """already_named: the torrent arrived in its pattern folder, so no rename was asked for."""
+                  already_named: bool = False, staged: bool = False) -> str | None:
+        """already_named: the torrent arrived in its pattern folder, so no rename was asked for.
+        staged: the completion chain renamed it in .staging on the library's disk before its move into the library."""
         try:
             title = f'COMPLETED: {HumanNamor.human_name(browser_source_data, delugapi_torrent.name)}'
             outcome_lines = self._completed_outcome_lines(delugapi_torrent.label, label_handler, destination,
                                                           refreshed, not_moved)
             detail_lines = self._completed_detail_lines(delugapi_torrent, label_handler, already_named)
+            if staged:
+                detail_lines.insert(1, 'staged via .staging')
         except Exception as exc:  # fail-open: a message that cannot be built is not sent
             return self._fail(f'completed message not built: {exc!r}')
         tags, priority = self._diverted((delugapi_torrent.label,) if delugapi_torrent.label else ())

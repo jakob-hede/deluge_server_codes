@@ -116,6 +116,16 @@ class Testor:
                                            ['white_check_mark', 'movin', 'testor@asusi7'], None)
 
             # ---
+            print("--- renamed and moved by the completion chain, staged on the libraries' disk")
+            announcor = HookAnnouncor(logger)
+            message_id = announcor.completed(florist_torrent, florist_handler, browser_source_data=florist_record,
+                                             destination=str(florist_handler.destin_dir), refreshed=True, staged=True)
+            all_as_expected &= self._check(message_id, captured[-1], 'COMPLETED: The Florist (2026)',
+                                           ['in **movies/movin**', 'jellyfin refreshed', 'renamed to **the.florist.2026/**',
+                                            'staged via .staging', '1.9 GB', f'hash **{infohash}**'],
+                                           ['white_check_mark', 'movin', 'testor@asusi7'], None)
+
+            # ---
             print("--- tv-in torrent, no record")
             tv_torrent = torrent(tv_name, tv_files, 'tv-in')
             tv_handler = TorrentHandlorTvin.factory('tv-in', delugapi_torrent=tv_torrent,

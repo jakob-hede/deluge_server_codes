@@ -286,7 +286,7 @@ class Testor:
         events = [(event, handler.__name__) for event, handler in self.event_manager.handlers]
         alerts = [(alert_type, handler.__name__) for alert_type, handler in self.alert_manager.handlers]
         self.judge('enable registers five event handlers and nine alert handlers', self.new_lines(),
-                   [f'enabled Oceanic 0.4, command {self.command}, log {self.log_file}'],
+                   [f'enabled Oceanic 0.5, command {self.command}, log {self.log_file}'],
                    self.new_spawns(), [],
                    ('event handlers', events, [('PreTorrentRemovedEvent', 'on_preremoved'),
                                                ('TorrentAddedEvent', 'on_torrent_added'),
@@ -380,9 +380,10 @@ class Testor:
 
     def case_metadata_received(self):
         self.core.on_metadata_received(FakeHandleAlert('metadata_received', FakeHandle(self.cream_id), self.cream_raw))
-        self.judge('metadata_received runs the command, no detail, no repair for a torrent Deluge handled',
-                   self.new_lines(), [f"metadata_received id {self.cream_id} name '{self.cream_raw}'"],
-                   self.new_spawns(), [self.spawned('metadata_received', self.cream_id, self.cream_raw, self.downloads)],
+        self.judge('metadata_received of a torrent Deluge handled runs the command, deluge_handled, no repair',
+                   self.new_lines(), [f"metadata_received id {self.cream_id} name '{self.cream_raw}' deluge_handled"],
+                   self.new_spawns(), [self.spawned('metadata_received', self.cream_id, self.cream_raw, self.downloads,
+                                                    'deluge_handled')],
                    ('metadata runs', self.torrent_manager.torrents[self.cream_id].metadata_runs, 0))
 
     def case_metadata_received_prefetch(self):
@@ -390,7 +391,7 @@ class Testor:
         self.core.on_metadata_received(FakeHandleAlert('metadata_received', FakeHandle(self.stranger_id),
                                                        'the.stranger.2026'))
         self.judge('a torrent not in the session is one line more and runs nothing', self.new_lines(),
-                   [f"metadata_received id {self.stranger_id} name 'the.stranger.2026'",
+                   [f"metadata_received id {self.stranger_id} name 'the.stranger.2026' deluge_missed",
                     f'no torrent {self.stranger_id} in the session for metadata_received, nothing run'],
                    self.new_spawns(), [])
 
@@ -407,6 +408,14 @@ class Testor:
         self.core.on_torrent_finished(self.cream_id)
         self.judge('finished runs the command, no detail', self.new_lines(), [f'TorrentFinishedEvent id {self.cream_id}'],
                    self.new_spawns(), [self.spawned('finished', self.cream_id, self.cream_raw, self.downloads)])
+
+    def case_torrent_finished_handled(self):
+        # a v1 torrent's raw finish: Deluge's own handler finds it by the alert's hash, and does the move and the event
+        self.core.on_torrent_finished_alert(FakeHandleAlert('torrent_finished', FakeHandle(self.cream_id), self.cream_raw))
+        self.judge('torrent_finished of a torrent Deluge handles passes deluge_handled', self.new_lines(),
+                   [f"torrent_finished id {self.cream_id} name '{self.cream_raw}' deluge_handled"],
+                   self.new_spawns(), [self.spawned('torrent_finished', self.cream_id, self.cream_raw, self.downloads,
+                                                    'deluge_handled')])
 
     def case_storage_moved(self):
         # Deluge's own handler ran first and set the new location, which the live torrent now gives
@@ -473,7 +482,7 @@ class Testor:
             raised = exc
         self.judge('a handle gone invalid logs one line, its failure or the miss, and runs nothing', self.new_lines(),
                    ['handler on_storage_moved failed: RuntimeError: invalid torrent handle used',
-                    f"metadata_received id {zeros} name '{self.cream_raw}'",
+                    f"metadata_received id {zeros} name '{self.cream_raw}' deluge_missed",
                     f'no torrent {zeros} in the session for metadata_received, nothing run'],
                    self.new_spawns(), [],
                    ('raised out', raised, None))
@@ -510,7 +519,7 @@ class Testor:
         # deluge-gtk's prefetch of a hybrid magnet: in no session, under either hash, both named
         self.core.on_metadata_received(FakeHandleAlert('metadata_received', self.hybrid_handle(), self.morris_name))
         self.judge('a hybrid not in the session names both hashes, one line more, and runs nothing', self.new_lines(),
-                   [f"metadata_received id {self.morris_v1} also {self.morris_v2t} name '{self.morris_name}'",
+                   [f"metadata_received id {self.morris_v1} also {self.morris_v2t} name '{self.morris_name}' deluge_missed",
                     f'no torrent {self.morris_v1} in the session for metadata_received, nothing run'],
                    self.new_spawns(), [])
 
@@ -534,12 +543,14 @@ class Testor:
         self.remove_torrent(self.morris_v1)
         self.judge("metadata_received of a hybrid: found by its v1, Deluge's missed metadata repaired once, then "
                    "torrent_finished heard and spawned, no second repair; the id let go at the removal", self.new_lines(),
-                   [f"metadata_received id {self.morris_v1} also {self.morris_v2t} name '{self.morris_name}'",
+                   [f"metadata_received id {self.morris_v1} also {self.morris_v2t} name '{self.morris_name}' deluge_missed",
                     f"repaired metadata for {self.morris_v1}, Deluge's handler missed it",
-                    f"torrent_finished id {self.morris_v1} also {self.morris_v2t} name '{self.morris_name}'"],
-                   self.new_spawns(), [self.spawned('metadata_received', self.morris_v1, self.morris_name, self.downloads),
+                    f"torrent_finished id {self.morris_v1} also {self.morris_v2t} name '{self.morris_name}' "
+                    f"deluge_missed"],
+                   self.new_spawns(), [self.spawned('metadata_received', self.morris_v1, self.morris_name, self.downloads,
+                                                    'deluge_missed'),
                                        self.spawned('torrent_finished', self.morris_v1, self.morris_name,
-                                                    self.downloads)],
+                                                    self.downloads, 'deluge_missed')],
                    ('metadata runs', torrent.metadata_runs, 1), ('has metadata', torrent.has_metadata, True),
                    ('the id held while the torrent is in the session', is_held, True),
                    ('the id held after its removal', self.morris_v1 in self.core.metadata_repaired, False))
@@ -741,6 +752,7 @@ class Testor:
         self.case_metadata_received_prefetch()
         self.case_metadata_failed()
         self.case_finished()
+        self.case_torrent_finished_handled()
         self.case_storage_moved()
         self.case_storage_moved_failed()
         self.case_folder_renamed()
