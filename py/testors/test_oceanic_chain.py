@@ -369,17 +369,13 @@ class Testor:
                         'tags': ['x', 'movin'], 'priority': 'high'})
 
     def case_failures_not_the_chains(self):
-        # no stage, or a hybrid left unhandled: a failure is a log line, no card
+        # no stage: a failure is a log line, no card
         self.daemon = self.yts_daemon()
         self.step('a storage move failing for a torrent with no stage: a log line', 'oce_storage_moved_failed',
                   'Permission denied', stage=None,
                   lines=[f"Chain of '{self.yts_folder}': oce_storage_moved_failed at stage 'none', nothing to do"])
         self.step('a rename failing for it: a log line', 'oce_file_rename_failed', '0', 'File exists', stage=None,
                   lines=[f"Chain of '{self.yts_folder}': oce_file_rename_failed at stage 'none', nothing to do"])
-        self.classes['Stagor'](self.torrent_id).write(stage='unhandled', entry='metadata_received', deluge='missed')
-        self.step('a failure for a hybrid left unhandled: a log line, it is left alone', 'oce_storage_moved_failed',
-                  'Permission denied', stage='unhandled',
-                  lines=[f"Chain of '{self.yts_folder}': oce_storage_moved_failed at stage 'unhandled', nothing to do"])
 
     def case_already_named(self):
         files = [{'index': 0, 'path': 'the.florist.2026/the.florist.2026.mp4', 'size': 1_900_000_000},
@@ -518,18 +514,21 @@ class Testor:
     def case_raw_finish(self):
         self.daemon = self.yts_daemon()
         self.daemon.location = '/deluge/downloads'
-        self.step("the raw finish of a torrent Deluge handles: a log line, Deluge's own move enters",
-                  'oce_torrent_finished', 'deluge_handled', stage=None)
-        self.step('the raw finish of a hybrid, its metadata before 0.5: one high card, stage unhandled',
-                  'oce_torrent_finished', 'deluge_missed', stage='unhandled',
-                  card={'title': 'COMPLETED: The Florist (2026)',
-                        'lines': ['not handled: hybrid torrent, left in **/deluge/downloads** until Deluge is patched',
-                                  f'hash **{self.torrent_id}**'],
-                        'tags': ['white_check_mark', 'warning', 'diverted'], 'priority': 'high'})
-        self.step('its raw finish at the next daemon start: a log line, no second card', 'oce_torrent_finished',
-                  'deluge_missed', stage='unhandled')
-        self.step('a move into completed/ for an unhandled torrent: nothing', 'oce_storage_moved', self.completed,
-                  stage='unhandled')
+        self.step("the raw finish: a log line, Deluge's own move enters", 'oce_torrent_finished', stage=None)
+
+    def case_hybrid_enters(self):
+        # a hybrid the daemon filed under its v2, the click's record named by its v1, which oce_added kept: Deluge's
+        # own move into completed/, which the patched daemon makes for a hybrid too, enters it as any torrent; the
+        # record's own title, which the release's name does not give, shows it was read
+        alternate = 'd1d96f75' * 5
+        self.daemon = self.yts_daemon(is_recorded=False)
+        self.lay_record({**self.record, 'infohash': alternate, 'media_title': 'The Hybrid Florist'}, alternate)
+        self.classes['Stagor'](self.torrent_id).write(alternate_ids=[alternate])
+        self.step('a hybrid moved into completed/, its record by its other hash: entered, the staging move',
+                  'oce_storage_moved', self.completed, stage='staging', acts=[('move', self.staging)])
+        self.check('the alternate kept in the stage', self.read_stage().get('alternate_ids'), [alternate])
+        self.check("the folder named by the record found by the alternate", self.read_stage().get('pattern_dir_name'),
+                   'the.hybrid.florist.2026')
 
     def case_off_daemon(self):
         # on dev the chain is left to the daemon's hook: a warning, no stage, no act, no card
@@ -573,6 +572,12 @@ class Testor:
             except ValueError as exc:
                 refused = 'refused'
             self.check(f'{changes} refused', refused, 'refused')
+        # a stage file written by 0.5 carries deluge: handled, a key no longer known: read, and dropped at the next write
+        stagor.stage_file.write_text('stage: done\nentry: storage_moved\ndeluge: handled\nlabel: movin\n')
+        self.check("a 0.5 stage file read, its stage", stagor.read().get('stage'), 'done')
+        stagor.write(label='movin')
+        self.check('its deluge key dropped at the next write', sorted(self.read_stage()),
+                   ['entry', 'label', 'stage', 'started', 'updated'])
 
     def executize(self):
         print('Testor.executize...')
@@ -585,7 +590,7 @@ class Testor:
             ('a label no handlor knows and no click record: a log line', self.case_label_without_handlor_no_record),
             ("no label, the click's record by the kept alternate: the card", self.case_unlabelled_by_alternate),
             ('failures on a chain torrent after it is done: FAILED cards', self.case_failures_on_a_chain_torrent),
-            ("failures with no stage, or for a hybrid left unhandled: log lines", self.case_failures_not_the_chains),
+            ('failures with no stage: log lines', self.case_failures_not_the_chains),
             ('arrived in its pattern folder: already named', self.case_already_named),
             ('a TV episode: no rename, no sidecars, a refresh that raises', self.case_tv_no_rename),
             ('a bare movie file: wrapped by a files plan', self.case_bare_movie_wrapped),
@@ -593,7 +598,8 @@ class Testor:
             ('the folder rename refused by the daemon: noted, moved as released', self.case_rename_refused),
             ('the move into the library fails: FAILED', self.case_storage_moved_failed),
             ('a link that raises: FAILED, raised on', self.case_link_raises),
-            ('the raw finish: Deluge handles it, or a hybrid is carded once', self.case_raw_finish),
+            ('the raw finish: a log line', self.case_raw_finish),
+            ('a hybrid, its record by its other hash: entered as any torrent', self.case_hybrid_enters),
             ('off the daemon: the chain left alone', self.case_off_daemon),
         ]
         for case_name, case in cases:

@@ -22,13 +22,13 @@ class Stagor:
 
     file_name: ClassVar[str] = 'stage.yml'
     lock_name: ClassVar[str] = 'stage.lock'
-    # in the chain's order, then the three ends outside it: no label to act on, a hybrid Deluge cannot track, a failure
+    # in the chain's order, then the two ends outside it: no label to act on, a failure
     stages: ClassVar[tuple[str, ...]] = ('entered', 'staging', 'renaming', 'renaming_files', 'moving', 'done',
-                                         'unlabelled', 'unhandled', 'failed')
+                                         'unlabelled', 'failed')
     # naming: how the folder came by its name, renamed by the chain, already in its pattern folder, or as released;
     # alternate_ids: a hybrid's v1 hash when the daemon files it under its v2, kept from oce_added to find the click's
     # record by
-    keys: ClassVar[tuple[str, ...]] = ('stage', 'entry', 'deluge', 'label', 'destination', 'pattern_dir_name',
+    keys: ClassVar[tuple[str, ...]] = ('stage', 'entry', 'label', 'destination', 'pattern_dir_name',
                                        'release_name', 'naming', 'alternate_ids', 'rename_plan', 'file_plan', 'notes',
                                        'started', 'updated')
     namings: ClassVar[tuple[str, ...]] = ('renamed', 'already', 'as_released')

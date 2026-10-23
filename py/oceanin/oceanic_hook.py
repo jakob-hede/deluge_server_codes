@@ -27,13 +27,13 @@ class OceanicHook:
     torrent Deluge has moved into completed/ is staged on the libraries' disk, renamed there, given its sidecars,
     moved into its library and refreshed, one act per run, each run woken by the daemon's event for the act before,
     oce_storage_moved, oce_folder_renamed and oce_file_renamed, and its failures, oce_storage_moved_failed and
-    oce_file_rename_failed, carded; where it stands is the torrent's stage.yml under /deluge/staging. A hybrid, which
-    Deluge 2.2.0 cannot track, is carded once at its metadata, or at its raw finish, oce_torrent_finished, and left
-    alone. Every other event only logs, one line with its details: oce_removed, which every remove ends in, and
-    oce_finished, Deluge's own finish. Only collections.abc, pathlib, typing and the loggor are imported here: shutil,
-    whose compression modules weigh most of a megabyte, yaml and fcntl, the Torrentor with twisted and the daemon's
-    client, the stage, the handlors, the announcor, the naming, the Jellyfin communicator and the video suffixes are
-    imported inside the methods that act, when they act, so a plain remove costs the interpreter and a log line.
+    oce_file_rename_failed, carded; where it stands is the torrent's stage.yml under /deluge/staging. Every other
+    event only logs, one line with its details: oce_removed, which every remove ends in, oce_finished, Deluge's own
+    finish, and oce_torrent_finished, libtorrent's. Only collections.abc, pathlib, typing and the loggor are imported
+    here: shutil, whose compression modules weigh most of a megabyte, yaml and fcntl, the Torrentor with twisted and
+    the daemon's client, the stage, the handlors, the announcor, the naming, the Jellyfin communicator and the video
+    suffixes are imported inside the methods that act, when they act, so a plain remove costs the interpreter and a
+    log line.
     """
 
     # movin alone, by the operator's word of 2026-10-23: Jellyfin's other movie libraries, instream, kidstuff and
@@ -138,15 +138,10 @@ class OceanicHook:
         return self.write_survey(torrent_file, 'oce_added')
 
     def on_metadata_received(self, *details: str) -> bool:
-        # the details: deluge_handled, or deluge_missed for a hybrid, whose alerts Deluge's handlers look up by the
-        # other hash. The name is the daemon's, which names the copy Deluge, or the plugin's repair, has just written.
-        # No daemon call and no label, the label was set on oce_added. False when the survey should have been written
-        # and was not
+        # the details: none. The name is the daemon's, which names the copy Deluge has just written. No daemon call and
+        # no label, the label was set on oce_added. False when the survey should have been written and was not
         self.log_hearing('oce_metadata_received', details)
-        is_written = self.ensure_metadata_survey()
-        if details and details[0] == 'deluge_missed':
-            self.unhandle('metadata_received')
-        return is_written
+        return self.ensure_metadata_survey()
 
     def ensure_metadata_survey(self) -> bool:
         survey_file = self.torrentor.survey_file
@@ -199,13 +194,9 @@ class OceanicHook:
         return self.log_hearing('oce_finished', details)
 
     def on_torrent_finished(self, *details: str) -> bool:
-        # the details: deluge_handled, Deluge's own handler moving the torrent into completed/, which enters the chain;
-        # or deluge_missed, a hybrid, which Deluge cannot track: carded once and left alone. Posted too for every
-        # complete torrent at a daemon start, which its stage, or Deluge's word, makes a log line
-        self.log_hearing('oce_torrent_finished', details)
-        if details and details[0] == 'deluge_missed':
-            self.unhandle('torrent_finished')
-        return True
+        # libtorrent's own finish, posted too for every complete torrent at a daemon start: a log line, the chain being
+        # entered on storage_moved into completed/
+        return self.log_hearing('oce_torrent_finished', details)
 
     def on_folder_renamed(self, *details: str) -> bool:
         # the details: the folder's old name and its new
@@ -225,22 +216,20 @@ class OceanicHook:
 
     def on_storage_moved_failed(self, *details: str) -> bool:
         # the details: the error's text, and the file's path when the error had one. A chain torrent's failure is a
-        # FAILED card, the chain stopped when it was moving; a torrent with no stage is not the chain's, and a hybrid
-        # left unhandled is left alone, a log line each
+        # FAILED card, the chain stopped when it was moving; a torrent with no stage is not the chain's, a log line
         self.log_hearing('oce_storage_moved_failed', details)
         if self.is_off_daemon():
             return True
         error = details[0] if details else ''
         with self.stagor.held():
             stage = self.stagor.read()
-            if stage.get('stage') in (None, 'unhandled'):
+            if stage.get('stage') is None:
                 return self.not_chains('oce_storage_moved_failed', stage)
             return self.fail(stage, f'storage move failed: {self.announcor.bold(error or "no error text")}')
 
     def on_file_rename_failed(self, *details: str) -> bool:
         # the details: the file's index and the error's text. Inside the renames, noted and the move as the files
-        # stand; at any other stage of a chain torrent a FAILED card; with no stage, not the chain's, or a hybrid
-        # left unhandled, a log line
+        # stand; at any other stage of a chain torrent a FAILED card; with no stage, not the chain's, a log line
         self.log_hearing('oce_file_rename_failed', details)
         if self.is_off_daemon():
             return True
@@ -249,7 +238,7 @@ class OceanicHook:
             stage = self.stagor.read()
             if stage.get('stage') in ('renaming', 'renaming_files'):
                 return self.react_link(self.link_rename_failed, stage, error)
-            if stage.get('stage') in (None, 'unhandled'):
+            if stage.get('stage') is None:
                 return self.not_chains('oce_file_rename_failed', stage)
             return self.fail(stage, f'rename failed: {self.announcor.bold(error or "no error text")}')
 
@@ -497,7 +486,7 @@ class OceanicHook:
             return True
         with self.stagor.held():
             stage = self.stagor.read()
-            if stage.get('stage') in ('done', 'unhandled', 'failed'):
+            if stage.get('stage') in ('done', 'failed'):
                 return self.not_chains(event_name, stage)
             return self.react_link(link, stage, *args)
 
@@ -581,7 +570,7 @@ class OceanicHook:
         view, handlor = self.handlor_view({**stage, 'label': current.label, 'release_name': current.name}, current)
         if handlor is None:
             return self.unlabel(stage, current, f'no handler for label {self.announcor.bold(current.label)}')
-        stage = self.stagor.write(stage='staging', entry='storage_moved', deluge='handled', label=current.label,
+        stage = self.stagor.write(stage='staging', entry='storage_moved', label=current.label,
                                   destination=str(handlor.destin_dir),
                                   pattern_dir_name=getattr(handlor, 'pattern_dir_name', None),
                                   release_name=current.name, notes=notes)
@@ -844,7 +833,7 @@ class OceanicHook:
         # no label, or one no handlor knows: stage unlabelled, so the hand's trigger, a label and a move into
         # completed/, enters it again; one card only for a click that came through the chain, its browser-source
         # record the mark, by its id or the alternate; any other torrent is not the chain's business, a log line
-        self.stagor.write(stage='unlabelled', entry='storage_moved', deluge='handled', label=current.label or None,
+        self.stagor.write(stage='unlabelled', entry='storage_moved', label=current.label or None,
                           release_name=current.name)
         record = self.media_facts(stage)
         if not record:
@@ -875,33 +864,3 @@ class OceanicHook:
         if announced:
             self.loggor.info(f'Announced {announced}')
         return False
-
-    def unhandle(self, entry: str) -> None:
-        # a hybrid, which Deluge 2.2.0 cannot track, its handlers looking it up by the other hash: one high card, the
-        # first at its metadata, a hybrid older than that at its finish, then stage unhandled, every later event a
-        # log line; nothing is acted on until Deluge is patched
-        from executin.naming import HumanNamor
-
-        if self.is_off_daemon():
-            return
-        with self.stagor.held():
-            stage = self.stagor.read()
-            if stage.get('stage'):
-                self.not_chains(f'oce_{entry}', stage)
-                return
-            announcor = self.announcor
-            name = HumanNamor.human_name(self.media_facts(stage), self.torrent_name)
-            hash_line = f'hash {announcor.bold(self.torrent_id)}'
-            if entry == 'metadata_received':
-                announced = announcor.say('failed', f'UNHANDLED: {name}',
-                                          ['hybrid torrent, Deluge cannot track it',
-                                           f'left in {announcor.bold(Path(self.base_sdir).name)}',
-                                           'remove it, or wait for the Deluge patch', hash_line], priority='high')
-            else:
-                announced = announcor.say('completed', f'COMPLETED: {name}',
-                                          [f'not handled: hybrid torrent, left in {announcor.bold(self.base_sdir)} '
-                                           f'until Deluge is patched', hash_line],
-                                          priority='high', tags=('warning', 'diverted'))
-            self.stagor.write(stage='unhandled', entry=entry, deluge='missed', release_name=self.torrent_name)
-            if announced:
-                self.loggor.info(f'Announced {announced}')

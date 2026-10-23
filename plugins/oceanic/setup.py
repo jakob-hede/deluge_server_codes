@@ -1,14 +1,14 @@
 #
 # Oceanic, a Deluge plugin of the magnetics chain, core only: no GTK and no web part. Built on dev with
 #   cd plugins/oceanic && /opt/projects/deluge_source_project/venv/bin/python3 setup.py bdist_egg
-# into dist/Oceanic-0.5-py3.12.egg, which is installed from deluge-gtk's Preferences, Plugins, Install Plugin.
+# into dist/Oceanic-0.6-py3.12.egg, which is installed from deluge-gtk's Preferences, Plugins, Install Plugin.
 #
 
 from setuptools import find_packages, setup
 
 __plugin_name__ = 'Oceanic'
 __author__ = 'sermin'
-__version__ = '0.5'
+__version__ = '0.6'
 __license__ = 'Unlicense'
 __description__ = "hears the daemon's alerts and events and runs one command per hearing"
 
