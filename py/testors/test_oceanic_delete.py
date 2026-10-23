@@ -456,6 +456,8 @@ class Testor:
             ('oce_removed: one log line, nothing read, no voice', self.case_removed),
             ('a death: the scan raises, the FAILED card at its stage, raised on', self.case_scan_raises),
             ('logs only: oce_finished, no detail', lambda: self.case_logging('oce_finished')),
+            ("logs only: oce_torrent_finished, libtorrent's raw finish, no detail",
+             lambda: self.case_logging('oce_torrent_finished')),
             ('logs only: oce_folder_renamed, the old name and the new',
              lambda: self.case_logging('oce_folder_renamed', 'The.Florist.2026.1080p/', 'the.florist.2026/')),
             ('logs only: oce_file_renamed, the index and the new name',

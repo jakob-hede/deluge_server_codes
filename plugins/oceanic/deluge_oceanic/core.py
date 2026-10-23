@@ -7,7 +7,7 @@ import re
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
-from typing import Any, Callable, ClassVar
+from typing import Any, Callable, ClassVar, Container
 
 from twisted.internet.utils import getProcessOutputAndValue
 
@@ -45,20 +45,49 @@ class Hearing:
             component.get('EventManager').deregister_event_handler(self.source, self.handler)
 
 
+@dataclass(frozen=True)
+class TorrentIds:
+    """
+    The id Deluge files a torrent under, of the hashes an alert names it by, and the other hash a hybrid v1/v2 torrent
+    has; written as the log lines name a torrent.
+    """
+
+    torrent_id: str
+    others: tuple[str, ...] = ()
+
+    def __str__(self) -> str:
+        return f'id {self.torrent_id}' + (f" also {' '.join(self.others)}" if self.others else '')
+
+    @classmethod
+    def resolved(cls, info_hashes: Any, info_hash: Any, known: Container[str]) -> TorrentIds:
+        # the v1 first, a magnet's btih, which Deluge files a magnet add under; then the alert's own, which libtorrent
+        # 2.0 gives a hybrid as its v2 hash truncated and which Deluge files a .torrent add under; the first known one,
+        # else the first, for the miss line. A handle whose torrent has left the session gives forty zeros for both,
+        # which no torrent has, or raises RuntimeError
+        candidates = [str(info_hashes.v1)] if info_hashes.has_v1() else []
+        if str(info_hash) not in candidates:
+            candidates.append(str(info_hash))
+        torrent_id = next((candidate for candidate in candidates if candidate in known), candidates[0])
+        return cls(torrent_id, tuple(candidate for candidate in candidates if candidate != torrent_id))
+
+
 class Core(CorePluginBase):
     """
     Oceanic's plugin. Hears the daemon's alerts and events and runs one command per hearing: libtorrent's removed,
     deleted and delete-failed alerts, which Deluge's alert manager receives and nothing in Deluge handles; the
-    metadata, storage-move and rename-failed alerts, after Deluge's own handlers of them; and Deluge's added,
-    finished and renamed events. It writes every one to its own log, oceanic_plugin.log, and spawns the shim, the one
-    configured command, for every one, the event named in the daemon's own words; the shim runs the runnor, which
-    hands the event to the hook, and the hook is the one gate: all policy lives there. An alert handler has two
-    seconds before the alert manager gives up on it, so nothing here blocks, sleeps or waits: the shim is spawned and
-    its end is a callback. Deluge's own log is not read on this box, so no handler raises: a failure is one line in
-    the plugin's log.
+    metadata, storage-move, rename-failed and finished alerts, after Deluge's own handlers of them; and Deluge's
+    added, finished and renamed events. It writes every one to its own log, oceanic_plugin.log, and spawns the shim,
+    the one configured command, for every one, the event named in the daemon's own words; the shim runs the runnor,
+    which hands the event to the hook, and the hook is the one gate: all policy lives there. A hybrid v1/v2 torrent
+    has two hashes, and libtorrent 2.0 names its alerts by the v2 one truncated while Deluge files a magnet add under
+    the v1, so a handle-based alert is resolved to Deluge's id by either hash, and the metadata Deluge's own handler
+    then missed is repaired here, the one line of Deluge's work the plugin does. An alert handler has two seconds
+    before the alert manager gives up on it, so nothing here blocks, sleeps or waits: the shim is spawned and its end
+    is a callback. Deluge's own log is not read on this box, so no handler raises: a failure is one line in the
+    plugin's log.
     """
 
-    plugin_version: ClassVar[str] = '0.3'
+    plugin_version: ClassVar[str] = '0.4'
     # the plugin's log is no setting, since Deluge loads oceanic.conf over the defaults: the log_file key an
     # oceanic.conf written by 0.1 carries is read by nothing
     log_file: ClassVar[str] = '/deluge/log/oceanic_plugin.log'
@@ -77,6 +106,7 @@ class Core(CorePluginBase):
     # set by enable, before any handler is registered
     config: Config
     preremoved_cache: dict[str, list[str]]
+    metadata_repaired: set[str]
 
     @property
     def hearings(self) -> tuple[Hearing, ...]:
@@ -94,11 +124,13 @@ class Core(CorePluginBase):
             Hearing(Hearing.Kind.ALERT, 'storage_moved', self.on_storage_moved),
             Hearing(Hearing.Kind.ALERT, 'storage_moved_failed', self.on_storage_moved_failed),
             Hearing(Hearing.Kind.ALERT, 'file_rename_failed', self.on_file_rename_failed),
+            Hearing(Hearing.Kind.ALERT, 'torrent_finished', self.on_torrent_finished_alert),
         )
 
     def enable(self) -> None:
         self.config = ConfigManager('oceanic.conf', self.DEFAULT_CONFIG)
         self.preremoved_cache = {}
+        self.metadata_repaired = set()
         for hearing in self.hearings:
             hearing.register()
         self.log_line(f"enabled Oceanic {self.plugin_version}, command {self.config['command']}, log {self.log_file}")
@@ -112,8 +144,10 @@ class Core(CorePluginBase):
     # --- the handlers
 
     def on_preremoved(self, torrent_id: str) -> None:
-        # the alerts come after the torrent has left the session, so its name and location are kept before
+        # the alerts come after the torrent has left the session, so its name and location are kept before; a torrent
+        # added again is a new Torrent, whose missed metadata is repaired again
         try:
+            self.metadata_repaired.discard(torrent_id)
             torrent = component.get('TorrentManager').torrents[torrent_id]
             status = torrent.get_status(['name', 'download_location'])
             self.preremoved_cache[torrent_id] = [torrent_id, status['name'], status['download_location']]
@@ -122,26 +156,28 @@ class Core(CorePluginBase):
 
     def on_torrent_deleted(self, alert: Any) -> None:
         try:
-            torrent_id = str(alert.info_hash)
-            self.log_line(f"{alert.what()} id {torrent_id} name '{alert.torrent_name}'")
+            ids = self.cached_ids(alert)
+            torrent_id = ids.torrent_id
+            self.log_line(f"{alert.what()} {ids} name '{alert.torrent_name}'")
             self.run_command('deleted', torrent_id)
         except Exception as exc:
             self.log_failure('on_torrent_deleted', exc)
 
     def on_torrent_delete_failed(self, alert: Any) -> None:
         try:
-            torrent_id = str(alert.info_hash)
+            ids = self.cached_ids(alert)
+            torrent_id = ids.torrent_id
             error = alert.error.message()
-            self.log_line(f"{alert.what()} id {torrent_id} name '{alert.torrent_name}' "
-                          f"error '{error}' ({alert.error.value()})")
+            self.log_line(f"{alert.what()} {ids} name '{alert.torrent_name}' error '{error}' ({alert.error.value()})")
             self.run_command('delete_failed', torrent_id, error)
         except Exception as exc:
             self.log_failure('on_torrent_delete_failed', exc)
 
     def on_torrent_removed(self, alert: Any) -> None:
         try:
-            torrent_id = str(alert.info_hash)
-            self.log_line(f"{alert.what()} id {torrent_id} name '{alert.torrent_name}'")
+            ids = self.cached_ids(alert)
+            torrent_id = ids.torrent_id
+            self.log_line(f"{alert.what()} {ids} name '{alert.torrent_name}'")
             try:
                 self.run_command('removed', torrent_id)
             finally:
@@ -157,8 +193,14 @@ class Core(CorePluginBase):
                 # every torrent the daemon replays from its state at start; Execute returns at once on it too
                 self.log_line(f'TorrentAddedEvent id {torrent_id} from state, nothing run')
                 return
-            self.log_line(f'TorrentAddedEvent id {torrent_id}')
-            self.run_command('added', torrent_id)
+            # a hybrid added from a .torrent file is filed under its v2 hash truncated, while the click's record is
+            # named by the magnet's v1: the hook is given the v1 to find it by, a hybrid magnet added bare needing none
+            torrent = component.get('TorrentManager').torrents.get(torrent_id)
+            info_hashes = torrent.handle.info_hashes() if torrent is not None else None
+            v1 = str(info_hashes.v1) if info_hashes is not None and info_hashes.has_v1() else ''
+            detail = (v1,) if v1 and v1 != torrent_id else ()
+            self.log_line(f'TorrentAddedEvent id {torrent_id}' + (f' v1 {v1}' if detail else ''))
+            self.run_command('added', torrent_id, *detail)
         except Exception as exc:
             self.log_failure('on_torrent_added', exc)
 
@@ -188,63 +230,105 @@ class Core(CorePluginBase):
 
     def on_metadata_received(self, alert: Any) -> None:
         try:
-            # after Deluge's own handler, which has written the .torrent; a magnet's prefetch torrent is in no session
-            torrent_id = self.handle_id(alert)
-            self.log_line(f"{alert.what()} id {torrent_id} name '{alert.torrent_name}'")
-            self.run_command('metadata_received', torrent_id)
+            # after Deluge's own handler, which has written the .torrent unless it missed a hybrid; a magnet's prefetch
+            # torrent is in no session
+            ids = self.live_ids(alert.handle)
+            self.log_line(f"{alert.what()} {ids} name '{alert.torrent_name}'")
+            self.run_handle_command('metadata_received', ids.torrent_id, alert.handle)
         except Exception as exc:
             self.log_failure('on_metadata_received', exc)
 
     def on_metadata_failed(self, alert: Any) -> None:
         try:
-            torrent_id = self.handle_id(alert)
+            ids = self.live_ids(alert.handle)
             error = alert.error.message()
-            self.log_line(f"{alert.what()} id {torrent_id} name '{alert.torrent_name}' "
+            self.log_line(f"{alert.what()} {ids} name '{alert.torrent_name}' "
                           f"error '{error}' ({alert.error.value()})")
-            self.run_command('metadata_failed', torrent_id, error)
+            self.run_handle_command('metadata_failed', ids.torrent_id, alert.handle, error)
         except Exception as exc:
             self.log_failure('on_metadata_failed', exc)
 
     def on_storage_moved(self, alert: Any) -> None:
         try:
-            # after Deluge's own handler, which has set the torrent's new download location
-            torrent_id = self.handle_id(alert)
+            # after Deluge's own handler, which has set the torrent's new download location unless it missed a hybrid
+            ids = self.live_ids(alert.handle)
             storage_path = alert.storage_path()
-            self.log_line(f"{alert.what()} id {torrent_id} name '{alert.torrent_name}' "
+            self.log_line(f"{alert.what()} {ids} name '{alert.torrent_name}' "
                           f"from '{alert.old_path()}' to '{storage_path}'")
-            self.run_command('storage_moved', torrent_id, storage_path)
+            self.run_handle_command('storage_moved', ids.torrent_id, alert.handle, storage_path)
         except Exception as exc:
             self.log_failure('on_storage_moved', exc)
 
     def on_storage_moved_failed(self, alert: Any) -> None:
         try:
             # Deluge forces the torrent into error state, and still emits TorrentFinishedEvent if it waited on the move
-            torrent_id = self.handle_id(alert)
+            ids = self.live_ids(alert.handle)
             error = alert.error.message()
             file_path = alert.file_path()
-            self.log_line(f"{alert.what()} id {torrent_id} name '{alert.torrent_name}' "
+            self.log_line(f"{alert.what()} {ids} name '{alert.torrent_name}' "
                           f"error '{error}' ({alert.error.value()}) file '{file_path}'")
             detail = (error, file_path) if file_path else (error,)
-            self.run_command('storage_moved_failed', torrent_id, *detail)
+            self.run_handle_command('storage_moved_failed', ids.torrent_id, alert.handle, *detail)
         except Exception as exc:
             self.log_failure('on_storage_moved_failed', exc)
 
     def on_file_rename_failed(self, alert: Any) -> None:
         try:
-            torrent_id = self.handle_id(alert)
+            ids = self.live_ids(alert.handle)
             index = alert.index
             error = alert.error.message()
-            self.log_line(f"{alert.what()} id {torrent_id} name '{alert.torrent_name}' index {index} "
-                          f"error '{error}' ({alert.error.value()})")
-            self.run_command('file_rename_failed', torrent_id, str(index), error)
+            self.log_line(f"{alert.what()} {ids} name '{alert.torrent_name}' "
+                          f"index {index} error '{error}' ({alert.error.value()})")
+            self.run_handle_command('file_rename_failed', ids.torrent_id, alert.handle, str(index), error)
         except Exception as exc:
             self.log_failure('on_file_rename_failed', exc)
 
-    @staticmethod
-    def handle_id(alert: Any) -> str:
-        # a handle-based alert's torrent id, read as Deluge's own handlers read it; a handle whose torrent has left the
-        # session gives forty zeros, which no torrent has, or raises RuntimeError, which the handler logs
-        return str(alert.handle.info_hash())
+    def on_torrent_finished_alert(self, alert: Any) -> None:
+        try:
+            # libtorrent's own finish, which Deluge's handler misses for a hybrid added bare, so no move_completed and
+            # no TorrentFinishedEvent follow for it; posted too for a torrent added complete or rechecked complete
+            ids = self.live_ids(alert.handle)
+            self.log_line(f"{alert.what()} {ids} name '{alert.torrent_name}'")
+            self.run_handle_command('torrent_finished', ids.torrent_id, alert.handle)
+        except Exception as exc:
+            self.log_failure('on_torrent_finished_alert', exc)
+
+    # --- the two hashes of a hybrid
+
+    def live_ids(self, handle: Any) -> TorrentIds:
+        # a torrent still in the session, by its handle
+        return TorrentIds.resolved(handle.info_hashes(), handle.info_hash(), component.get('TorrentManager').torrents)
+
+    def cached_ids(self, alert: Any) -> TorrentIds:
+        # a removal trio's torrent, gone from the session, by the alert's own hashes against the pre-removed cache
+        return TorrentIds.resolved(alert.info_hashes, alert.info_hash, self.preremoved_cache)
+
+    def torrent_id_for(self, handle: Any) -> str:
+        return self.live_ids(handle).torrent_id
+
+    def run_handle_command(self, event: str, torrent_id: str, handle: Any, *detail: str) -> None:
+        # a handle-based hearing's command, its torrent's missed metadata repaired first
+        self.repair_metadata(torrent_id, handle)
+        self.run_command(event, torrent_id, *detail)
+
+    # --- the metadata Deluge misses for a hybrid added bare
+
+    def repair_metadata(self, torrent_id: str, handle: Any) -> None:
+        # Deluge's Torrent of a hybrid added bare never ran on_metadata_received, its own handler having missed the
+        # alert: no .torrent written, no files listed, though libtorrent has the metadata. Run here, once per Torrent,
+        # the id let go at its removal, from whichever handle-based alert comes first; a failure is a line, the
+        # command goes on. The one line of Deluge's work the plugin does
+        torrent = component.get('TorrentManager').torrents.get(torrent_id)
+        if torrent is None or torrent.has_metadata or torrent_id in self.metadata_repaired:
+            return
+        try:
+            if not handle.status().has_metadata:
+                return
+            self.metadata_repaired.add(torrent_id)
+            torrent.on_metadata_received()
+            self.log_line(f"repaired metadata for {torrent_id}, Deluge's handler missed it")
+        except Exception as exc:
+            self.log_failure('repair_metadata', exc)
 
     # --- the command
 

@@ -53,14 +53,48 @@ class FakeAlertManager(component.Component):
         self.handlers = [(alert_type, kept) for alert_type, kept in self.handlers if kept != handler]
 
 
+ZEROS = '0' * 40
+
+
+class FakeInfoHashes:
+    """libtorrent 2.0's info_hash_t: a torrent's v1 hash and its v2, either one zeros when the torrent has none."""
+
+    def __init__(self, v1: str, v2: str):
+        self.v1 = v1
+        self.v2 = v2
+
+    def has_v1(self) -> bool:
+        return self.v1 != ZEROS
+
+    def has_v2(self) -> bool:
+        return self.v2 != ZEROS
+
+
+class FakeHandleStatus:
+    def __init__(self, has_metadata: bool):
+        self.has_metadata = has_metadata
+
+
 class FakeTorrent:
-    def __init__(self, name: str, download_location: str):
+    def __init__(self, name: str, download_location: str, handle: 'FakeHandle', has_metadata: bool = True):
         self.name = name
         self.download_location = download_location
+        self.handle = handle
+        self.has_metadata = has_metadata
+        self.metadata_runs = 0
+        self.is_repair_raising = False
 
     def get_status(self, keys: list[str]) -> dict[str, str]:
         status = {'name': self.name, 'download_location': self.download_location}
         return {key: status[key] for key in keys}
+
+    def on_metadata_received(self):
+        # Deluge's Torrent.on_metadata_received sets has_metadata, then writes the .torrent; the raising one fails
+        # before the flag, so only the plugin's own once-per-torrent set stops a second try
+        self.metadata_runs += 1
+        if self.is_repair_raising:
+            raise OSError(28, 'No space left on device')
+        self.has_metadata = True
 
 
 class FakeTorrentManager(component.Component):
@@ -82,9 +116,14 @@ class FakeErrorCode:
 
 
 class FakeAlert:
-    def __init__(self, what: str, info_hash: str, torrent_name: str, error: FakeErrorCode | None = None):
+    """A removal trio's alert, which names its torrent by its own hashes, no handle: info_hash, a hybrid's v2 truncated,
+    and info_hashes, its v1 by default the same, as a v1-only torrent's is."""
+
+    def __init__(self, what: str, info_hash: str, torrent_name: str, error: FakeErrorCode | None = None,
+                 v1: str | None = None):
         self._what = what
         self._info_hash = info_hash
+        self._info_hashes = FakeInfoHashes(info_hash if v1 is None else v1, ZEROS)
         self.torrent_name = torrent_name
         if error is not None:
             self.error = error
@@ -96,6 +135,10 @@ class FakeAlert:
     def info_hash(self) -> str:
         return self._info_hash
 
+    @property
+    def info_hashes(self) -> FakeInfoHashes:
+        return self._info_hashes
+
 
 class RaisingAlert(FakeAlert):
     # its text spans two lines, as Boost.Python's ArgumentError spans four, for the failed line to fold
@@ -103,18 +146,36 @@ class RaisingAlert(FakeAlert):
     def info_hash(self) -> str:
         raise RuntimeError('info_hash raised\n    on purpose')
 
+    @property
+    def info_hashes(self) -> FakeInfoHashes:
+        raise RuntimeError('info_hash raised\n    on purpose')
+
 
 class FakeHandle:
-    def __init__(self, info_hash: str):
+    """A torrent's handle: info_hash() the hash libtorrent names it by, a hybrid's v2 truncated, its v1 by default the
+    same, as a v1-only torrent's is; status() says whether libtorrent has the metadata."""
+
+    def __init__(self, info_hash: str, v1: str | None = None, v2: str = ZEROS, has_metadata: bool = True):
         self._info_hash = info_hash
+        self._info_hashes = FakeInfoHashes(info_hash if v1 is None else v1, v2)
+        self._status = FakeHandleStatus(has_metadata)
 
     def info_hash(self) -> str:
         return self._info_hash
+
+    def info_hashes(self) -> FakeInfoHashes:
+        return self._info_hashes
+
+    def status(self) -> FakeHandleStatus:
+        return self._status
 
 
 class RaisingHandle(FakeHandle):
     # a handle gone invalid, as Deluge's own handlers guard it
     def info_hash(self) -> str:
+        raise RuntimeError('invalid torrent handle used')
+
+    def info_hashes(self) -> FakeInfoHashes:
         raise RuntimeError('invalid torrent handle used')
 
 
@@ -214,15 +275,18 @@ class Testor:
     def spawned(self, *args: str) -> tuple[str, list[bytes]]:
         return str(self.command), [arg.encode('utf8') for arg in args]
 
-    def add_torrent(self, torrent_id: str, name: str, location: str):
-        self.torrent_manager.torrents[torrent_id] = FakeTorrent(name, location)
+    def add_torrent(self, torrent_id: str, name: str, location: str, handle: FakeHandle | None = None,
+                    has_metadata: bool = True) -> FakeTorrent:
+        torrent = FakeTorrent(name, location, handle or FakeHandle(torrent_id), has_metadata)
+        self.torrent_manager.torrents[torrent_id] = torrent
+        return torrent
 
     def case_enable(self):
         self.core.enable()
         events = [(event, handler.__name__) for event, handler in self.event_manager.handlers]
         alerts = [(alert_type, handler.__name__) for alert_type, handler in self.alert_manager.handlers]
-        self.judge('enable registers five event handlers and eight alert handlers', self.new_lines(),
-                   [f'enabled Oceanic 0.3, command {self.command}, log {self.log_file}'],
+        self.judge('enable registers five event handlers and nine alert handlers', self.new_lines(),
+                   [f'enabled Oceanic 0.4, command {self.command}, log {self.log_file}'],
                    self.new_spawns(), [],
                    ('event handlers', events, [('PreTorrentRemovedEvent', 'on_preremoved'),
                                                ('TorrentAddedEvent', 'on_torrent_added'),
@@ -236,7 +300,8 @@ class Testor:
                                                ('metadata_failed', 'on_metadata_failed'),
                                                ('storage_moved', 'on_storage_moved'),
                                                ('storage_moved_failed', 'on_storage_moved_failed'),
-                                               ('file_rename_failed', 'on_file_rename_failed')]),
+                                               ('file_rename_failed', 'on_file_rename_failed'),
+                                               ('torrent_finished', 'on_torrent_finished_alert')]),
                    ('rpc objects', list(self.rpc_server.objects), ['oceanic']),
                    ('the defaults', Core.DEFAULT_CONFIG, {'command': '/codes/oceanic_plugin/oceanic.sh'}),
                    ("the 0.1 conf's log_file written to", self.old_log_file.exists(), False))
@@ -315,9 +380,10 @@ class Testor:
 
     def case_metadata_received(self):
         self.core.on_metadata_received(FakeHandleAlert('metadata_received', FakeHandle(self.cream_id), self.cream_raw))
-        self.judge('metadata_received runs the command, no detail', self.new_lines(),
-                   [f"metadata_received id {self.cream_id} name '{self.cream_raw}'"],
-                   self.new_spawns(), [self.spawned('metadata_received', self.cream_id, self.cream_raw, self.downloads)])
+        self.judge('metadata_received runs the command, no detail, no repair for a torrent Deluge handled',
+                   self.new_lines(), [f"metadata_received id {self.cream_id} name '{self.cream_raw}'"],
+                   self.new_spawns(), [self.spawned('metadata_received', self.cream_id, self.cream_raw, self.downloads)],
+                   ('metadata runs', self.torrent_manager.torrents[self.cream_id].metadata_runs, 0))
 
     def case_metadata_received_prefetch(self):
         # a magnet's prefetch torrent, added and removed by Deluge beside the session's torrent list
@@ -413,6 +479,185 @@ class Testor:
                    ('raised out', raised, None))
         self.torrent_manager.torrents.pop(self.cream_id, None)
 
+    # --- a hybrid v1/v2 torrent: libtorrent names its alerts by the v2 hash truncated, Deluge files a magnet add by v1
+
+    def hybrid_handle(self, has_metadata: bool = True) -> FakeHandle:
+        return FakeHandle(self.morris_v2t, v1=self.morris_v1, v2=self.morris_v2, has_metadata=has_metadata)
+
+    def case_hybrid_ids(self):
+        torrents = self.torrent_manager.torrents
+        hybrid = self.hybrid_handle()
+        found: list[tuple[str, object, object]] = []
+        self.add_torrent(self.morris_v1, self.morris_name, self.downloads, hybrid)
+        found.append(('a hybrid filed under its v1', self.core.torrent_id_for(hybrid), self.morris_v1))
+        torrents[self.morris_v2t] = torrents.pop(self.morris_v1)
+        found.append(('a hybrid filed under its v2', self.core.torrent_id_for(hybrid), self.morris_v2t))
+        torrents.pop(self.morris_v2t)
+        found.append(('a hybrid filed under neither', self.core.torrent_id_for(hybrid), self.morris_v1))
+        v2_only = FakeHandle(self.morris_v2t, v1=ZEROS, v2=self.morris_v2)
+        found.append(('a v2-only torrent, filed under neither', self.core.torrent_id_for(v2_only), self.morris_v2t))
+        found.append(('a dead handle giving zeros', self.core.torrent_id_for(FakeHandle(ZEROS)), ZEROS))
+        try:
+            self.core.torrent_id_for(RaisingHandle(self.morris_v2t))
+            raised = None
+        except RuntimeError as exc:
+            raised = str(exc)
+        found.append(('a dead handle raising', raised, 'invalid torrent handle used'))
+        self.judge("torrent_id_for: Deluge's id by either hash, the v1 first, else the first for the miss",
+                   self.new_lines(), [], self.new_spawns(), [], *found)
+
+    def case_hybrid_prefetch(self):
+        # deluge-gtk's prefetch of a hybrid magnet: in no session, under either hash, both named
+        self.core.on_metadata_received(FakeHandleAlert('metadata_received', self.hybrid_handle(), self.morris_name))
+        self.judge('a hybrid not in the session names both hashes, one line more, and runs nothing', self.new_lines(),
+                   [f"metadata_received id {self.morris_v1} also {self.morris_v2t} name '{self.morris_name}'",
+                    f'no torrent {self.morris_v1} in the session for metadata_received, nothing run'],
+                   self.new_spawns(), [])
+
+    def case_hybrid_added_bare(self):
+        # a hybrid magnet added bare: before the metadata libtorrent knows the v1 alone, and Deluge files it so
+        self.add_torrent(self.morris_v1, self.morris_dn, self.downloads, FakeHandle(self.morris_v1, has_metadata=False),
+                         has_metadata=False)
+        self.core.on_torrent_added(self.morris_v1, False)
+        self.judge('a hybrid added bare is filed under its v1, the hook given no detail', self.new_lines(),
+                   [f'TorrentAddedEvent id {self.morris_v1}'],
+                   self.new_spawns(), [self.spawned('added', self.morris_v1, self.morris_dn, self.downloads)])
+
+    def case_hybrid_metadata_repaired(self):
+        # the metadata comes and libtorrent names the torrent by its v2 from now on: Deluge's handler missed it
+        torrent = self.torrent_manager.torrents[self.morris_v1]
+        torrent.handle = self.hybrid_handle()
+        torrent.name = self.morris_name
+        self.core.on_metadata_received(FakeHandleAlert('metadata_received', torrent.handle, self.morris_name))
+        self.core.on_torrent_finished_alert(FakeHandleAlert('torrent_finished', torrent.handle, self.morris_name))
+        is_held = self.morris_v1 in self.core.metadata_repaired
+        self.remove_torrent(self.morris_v1)
+        self.judge("metadata_received of a hybrid: found by its v1, Deluge's missed metadata repaired once, then "
+                   "torrent_finished heard and spawned, no second repair; the id let go at the removal", self.new_lines(),
+                   [f"metadata_received id {self.morris_v1} also {self.morris_v2t} name '{self.morris_name}'",
+                    f"repaired metadata for {self.morris_v1}, Deluge's handler missed it",
+                    f"torrent_finished id {self.morris_v1} also {self.morris_v2t} name '{self.morris_name}'"],
+                   self.new_spawns(), [self.spawned('metadata_received', self.morris_v1, self.morris_name, self.downloads),
+                                       self.spawned('torrent_finished', self.morris_v1, self.morris_name,
+                                                    self.downloads)],
+                   ('metadata runs', torrent.metadata_runs, 1), ('has metadata', torrent.has_metadata, True),
+                   ('the id held while the torrent is in the session', is_held, True),
+                   ('the id held after its removal', self.morris_v1 in self.core.metadata_repaired, False))
+
+    def remove_torrent(self, torrent_id: str):
+        # as Deluge removes one: PreTorrentRemovedEvent first, then the torrent gone from the session; the cache entry
+        # its removed alert would pop, popped here
+        self.core.on_preremoved(torrent_id)
+        self.torrent_manager.torrents.pop(torrent_id, None)
+        self.core.preremoved_cache.pop(torrent_id, None)
+
+    def case_hybrid_added_from_file(self):
+        # a hybrid added from its .torrent: Deluge files it under the v2, so the hook is given the v1 for the record
+        self.add_torrent(self.morris_v2t, self.morris_name, self.downloads, self.hybrid_handle())
+        self.core.on_torrent_added(self.morris_v2t, False)
+        self.judge("a hybrid filed under its v2 is added with its v1 as the one detail", self.new_lines(),
+                   [f'TorrentAddedEvent id {self.morris_v2t} v1 {self.morris_v1}'],
+                   self.new_spawns(), [self.spawned('added', self.morris_v2t, self.morris_name, self.downloads,
+                                                    self.morris_v1)])
+        self.torrent_manager.torrents.pop(self.morris_v2t)
+
+    def case_repair_on_another_alert(self):
+        # the amendment: a torrent already perturbed, Phillip Morris's state since its missed metadata, heals at the
+        # first handle-based alert of any kind; the same magnet added again after its removal, as the live verify
+        # does, is a new Torrent and is repaired again
+        torrent = self.add_torrent(self.morris_v1, self.morris_name, self.downloads, self.hybrid_handle(),
+                                   has_metadata=False)
+        self.core.on_storage_moved(FakeHandleAlert('storage_moved', torrent.handle, self.morris_name,
+                                                   storage_path=self.completed, old_path=self.downloads))
+        self.judge('added again and perturbed, the torrent is repaired at a storage_moved alert, the command run after',
+                   self.new_lines(),
+                   [f"storage_moved id {self.morris_v1} also {self.morris_v2t} name '{self.morris_name}' "
+                    f"from '{self.downloads}' to '{self.completed}'",
+                    f"repaired metadata for {self.morris_v1}, Deluge's handler missed it"],
+                   self.new_spawns(), [self.spawned('storage_moved', self.morris_v1, self.morris_name, self.downloads,
+                                                    self.completed)],
+                   ('metadata runs', torrent.metadata_runs, 1))
+        self.remove_torrent(self.morris_v1)
+
+    def case_repair_fails_once(self):
+        # a repair that raises is one line, the command still runs, and it is not tried again while the plugin runs
+        torrent = self.add_torrent(self.morris_v1, self.morris_name, self.downloads, self.hybrid_handle(),
+                                   has_metadata=False)
+        torrent.is_repair_raising = True
+        error = FakeErrorCode('File exists', 17)
+        for index in (0, 1):
+            self.core.on_file_rename_failed(FakeHandleAlert('file_rename_failed', torrent.handle, self.morris_name,
+                                                            error=error, index=index))
+        self.judge('a failed repair is one line and no second try, both commands run', self.new_lines(),
+                   [f"file_rename_failed id {self.morris_v1} also {self.morris_v2t} name '{self.morris_name}' "
+                    f"index 0 error 'File exists' (17)",
+                    'handler repair_metadata failed: OSError: [Errno 28] No space left on device',
+                    f"file_rename_failed id {self.morris_v1} also {self.morris_v2t} name '{self.morris_name}' "
+                    f"index 1 error 'File exists' (17)"],
+                   self.new_spawns(), [self.spawned('file_rename_failed', self.morris_v1, self.morris_name, self.downloads,
+                                                    str(index), 'File exists') for index in (0, 1)],
+                   ('metadata runs', torrent.metadata_runs, 1), ('has metadata', torrent.has_metadata, False))
+        self.remove_torrent(self.morris_v1)
+
+    def case_no_repair_before_metadata(self):
+        # a bare magnet whose metadata never came: libtorrent has none either, so nothing to repair
+        torrent = self.add_torrent(self.morris_v1, self.morris_dn, self.downloads,
+                                   FakeHandle(self.morris_v1, has_metadata=False), has_metadata=False)
+        error = FakeErrorCode('Operation timed out', 110)
+        self.core.on_metadata_failed(FakeHandleAlert('metadata_failed', torrent.handle, self.morris_dn, error=error))
+        self.judge('metadata_failed of a torrent libtorrent has no metadata for repairs nothing', self.new_lines(),
+                   [f"metadata_failed id {self.morris_v1} name '{self.morris_dn}' error 'Operation timed out' (110)"],
+                   self.new_spawns(), [self.spawned('metadata_failed', self.morris_v1, self.morris_dn, self.downloads,
+                                                    'Operation timed out')],
+                   ('metadata runs', torrent.metadata_runs, 0))
+        self.remove_torrent(self.morris_v1)
+
+    # --- the removal trio of a hybrid: Deluge caches it under its id, the alerts name it by the v2 hash truncated
+
+    def case_hybrid_removed_by_v1(self):
+        # a hybrid added bare, filed under its v1, deleted ticked
+        self.add_torrent(self.morris_v1, self.morris_name, self.movin, self.hybrid_handle())
+        self.core.on_preremoved(self.morris_v1)
+        self.torrent_manager.torrents.pop(self.morris_v1)
+        self.core.on_torrent_deleted(FakeAlert('torrent_deleted', self.morris_v2t, self.morris_name, v1=self.morris_v1))
+        self.core.on_torrent_removed(FakeAlert('torrent_removed', self.morris_v2t, self.morris_name, v1=self.morris_v1))
+        self.judge("a hybrid's removal trio, cached under its v1: found by the v1, the v1 spawned and popped",
+                   self.new_lines(),
+                   [f"torrent_deleted id {self.morris_v1} also {self.morris_v2t} name '{self.morris_name}'",
+                    f"torrent_removed id {self.morris_v1} also {self.morris_v2t} name '{self.morris_name}'",
+                    f'popped {self.morris_v1} from the cache, 0 left'],
+                   self.new_spawns(), [self.spawned('deleted', self.morris_v1, self.morris_name, self.movin),
+                                       self.spawned('removed', self.morris_v1, self.morris_name, self.movin)],
+                   ('cache', self.core.preremoved_cache, {}))
+
+    def case_hybrid_removed_by_v2(self):
+        # a hybrid added from its .torrent, filed under its v2 truncated, its ticked delete failing on the leftovers
+        self.add_torrent(self.morris_v2t, self.morris_name, self.movin, self.hybrid_handle())
+        self.core.on_preremoved(self.morris_v2t)
+        self.torrent_manager.torrents.pop(self.morris_v2t)
+        error = FakeErrorCode('Directory not empty', 39)
+        self.core.on_torrent_delete_failed(FakeAlert('torrent_delete_failed', self.morris_v2t, self.morris_name, error,
+                                                     v1=self.morris_v1))
+        self.core.on_torrent_removed(FakeAlert('torrent_removed', self.morris_v2t, self.morris_name, v1=self.morris_v1))
+        self.judge("a hybrid's removal trio, cached under its v2: found by the v2, the v2 spawned and popped",
+                   self.new_lines(),
+                   [f"torrent_delete_failed id {self.morris_v2t} also {self.morris_v1} name '{self.morris_name}' "
+                    f"error 'Directory not empty' (39)",
+                    f"torrent_removed id {self.morris_v2t} also {self.morris_v1} name '{self.morris_name}'",
+                    f'popped {self.morris_v2t} from the cache, 0 left'],
+                   self.new_spawns(), [self.spawned('delete_failed', self.morris_v2t, self.morris_name, self.movin,
+                                                    'Directory not empty'),
+                                       self.spawned('removed', self.morris_v2t, self.morris_name, self.movin)],
+                   ('cache', self.core.preremoved_cache, {}))
+
+    def case_hybrid_removed_uncached(self):
+        # deluge-gtk's prefetch of a hybrid, removed beside the session: cached under neither hash
+        self.core.on_torrent_deleted(FakeAlert('torrent_deleted', self.morris_v2t, self.morris_name, v1=self.morris_v1))
+        self.judge("a hybrid's removal alert cached under neither hash names both and runs nothing", self.new_lines(),
+                   [f"torrent_deleted id {self.morris_v1} also {self.morris_v2t} name '{self.morris_name}'",
+                    f'no cached location for {self.morris_v1}, nothing run'],
+                   self.new_spawns(), [])
+
     def case_handler_raises(self):
         try:
             self.core.on_torrent_removed(RaisingAlert('torrent_removed', self.killer_id, 'the.killer.2023'))
@@ -459,7 +704,7 @@ class Testor:
 
     def case_disable(self):
         self.core.disable()
-        self.judge('disable deregisters all thirteen', self.new_lines(), ['disabled'], self.new_spawns(), [],
+        self.judge('disable deregisters all fourteen', self.new_lines(), ['disabled'], self.new_spawns(), [],
                    ('event handlers', self.event_manager.handlers, []),
                    ('alert handlers', self.alert_manager.handlers, []))
 
@@ -469,8 +714,15 @@ class Testor:
     cream_id = 'c0ffeec0ffeec0ffeec0ffeec0ffeec0ffeec0ff'
     cream_raw = 'Ice.Cream.Man.2026.1080p.WEBRip.x265'
     cream_folder = 'ice.cream.man.2026'
+    # Phillip Morris's two hashes as the operator's click showed them, the v1 the magnet's btih, padded to length
+    morris_v1 = 'd1d96f75' * 5
+    morris_v2t = 'cc0d690a' * 5
+    morris_v2 = 'cc0d690a' * 8
+    morris_dn = 'Phillip Morris (2025) 1080p WEB h264'
+    morris_name = 'Phillip.Morris.2025.1080p.WEB.h264-GRP'
     movin = '/ocean/video/movies/movin'
     downloads = '/deluge/downloads'
+    completed = '/deluge/completed/'
 
     def executize(self):
         print(f'base: {self.base}')
@@ -495,6 +747,18 @@ class Testor:
         self.case_file_renamed()
         self.case_file_rename_failed()
         self.case_handle_gone()
+        # one hybrid torrent added bare through its missed metadata and its finish, then the other shapes and edges
+        self.case_hybrid_ids()
+        self.case_hybrid_prefetch()
+        self.case_hybrid_added_bare()
+        self.case_hybrid_metadata_repaired()
+        self.case_hybrid_added_from_file()
+        self.case_repair_on_another_alert()
+        self.case_repair_fails_once()
+        self.case_no_repair_before_metadata()
+        self.case_hybrid_removed_by_v1()
+        self.case_hybrid_removed_by_v2()
+        self.case_hybrid_removed_uncached()
         self.case_command_ends()
         self.case_disable()
         print('ALL AS EXPECTED' if self.all_as_expected else 'NOT ALL AS EXPECTED')

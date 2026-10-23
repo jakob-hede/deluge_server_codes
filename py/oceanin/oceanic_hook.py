@@ -17,13 +17,14 @@ class OceanicHook:
     clean the payload's folder in the movin library, tell Jellyfin, and say so in one DELETED card. The added path
     acts: oce_added sets the label the click's hint names and writes the survey when the daemon's copy of the torrent
     is there, oce_metadata_received writes it when it is not yet, and oce_metadata_failed says so in one FAILED card,
-    all through the old Torrentor, its own lines in torrentor.log and the outcome here. Every other event only logs,
-    one line with its details: oce_removed, which every remove ends in, and the six the completion chain will act on,
-    oce_finished, oce_folder_renamed, oce_file_renamed, oce_storage_moved, oce_storage_moved_failed and
-    oce_file_rename_failed. Only pathlib and the loggor are imported here: shutil, whose compression modules weigh
-    most of a megabyte, yaml, the Torrentor with twisted and the daemon's client, the announcor, the naming, the
-    Jellyfin communicator and the video suffixes are imported inside the methods that act, when they act, so a plain
-    remove costs the interpreter and a log line.
+    all through the old Torrentor, its own lines in torrentor.log and the outcome here; a hybrid's v1 hash, when the
+    daemon files it under its v2, comes with oce_added to find the click's record by. Every other event only logs, one
+    line with its details: oce_removed, which every remove ends in, and the seven the completion chain will act on,
+    oce_finished, oce_torrent_finished, oce_folder_renamed, oce_file_renamed, oce_storage_moved,
+    oce_storage_moved_failed and oce_file_rename_failed. Only pathlib and the loggor are imported here: shutil, whose
+    compression modules weigh most of a megabyte, yaml, the Torrentor with twisted and the daemon's client, the
+    announcor, the naming, the Jellyfin communicator and the video suffixes are imported inside the methods that act,
+    when they act, so a plain remove costs the interpreter and a log line.
     """
 
     # movin alone, by the operator's word of 2026-10-23: Jellyfin's other movie libraries, instream, kidstuff and
@@ -75,6 +76,8 @@ class OceanicHook:
             return self.on_added(*extras)
         elif event_name == 'oce_finished':
             return self.on_finished(*extras)
+        elif event_name == 'oce_torrent_finished':
+            return self.on_torrent_finished(*extras)
         elif event_name == 'oce_folder_renamed':
             return self.on_folder_renamed(*extras)
         elif event_name == 'oce_file_renamed':
@@ -100,10 +103,15 @@ class OceanicHook:
     # --- the added path: the label, the survey, and a magnet whose metadata never came
 
     def on_added(self, *details: str) -> bool:
-        # no detail. The label first, then the survey: a prefetched magnet, added as a file, has its copy written in the
-        # same daemon call as this event, a bare magnet only once its metadata comes, under the daemon's name from then
-        # on. No card: the click has its own
+        # the details: none, or a hybrid's v1 hash when the daemon files it under its v2, the click's record being named
+        # by the v1. The label first, then the survey: a prefetched magnet, added as a file, has its copy written in
+        # the same daemon call as this event, a bare magnet only once its metadata comes, under the daemon's name from
+        # then on. No card: the click has its own
         self.log_hearing('oce_added', details)
+        if details:
+            self.torrentor.alternate_ids = (details[0],)
+            self.loggor.info(f"Browser-source record of '{self.torrent_name}' looked for by '{self.torrent_id}', "
+                             f"then by '{details[0]}'")
         self.label_by_hint()
         torrent_file = self.torrentor.torrent_file_for(self.torrent_name)
         if torrent_file is None:
@@ -163,6 +171,11 @@ class OceanicHook:
 
     def on_finished(self, *details: str) -> bool:
         return self.log_hearing('oce_finished', details)
+
+    def on_torrent_finished(self, *details: str) -> bool:
+        # libtorrent's raw finish, which Deluge misses for a hybrid added bare; posted too for a torrent added complete
+        # or rechecked complete, which the completion chain will filter out as Deluge's handler does
+        return self.log_hearing('oce_torrent_finished', details)
 
     def on_folder_renamed(self, *details: str) -> bool:
         # the details: the folder's old name and its new

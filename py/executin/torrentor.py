@@ -41,6 +41,8 @@ class Torrentor:
         self.logger = DelugapiTorrentorLoggor()
         self.reaction_response: DelugApiResponse = None
         self.label_outcome: str | None = None  # what label_by_hint did, for a caller that never sees its Deferred
+        # the torrent's other hashes, a hybrid's v1 when the daemon files it under its v2, to find the click's record by
+        self.alternate_ids: tuple[str, ...] = ()
         self.announcor = HookAnnouncor(self.logger)  # the one voice of whichever hook this process runs
 
     def process_event(self, event_name):
@@ -106,7 +108,10 @@ class Torrentor:
 
     @property
     def browser_source_file(self) -> Path:
-        return self.browser_source_dir / f'{self.torrent_id}.yml'
+        # the click's record is named by the magnet's hash: the torrent id's first, then each alternate's
+        candidates = [self.browser_source_dir / f'{torrent_id}.yml'
+                      for torrent_id in (self.torrent_id, *self.alternate_ids)]
+        return next((candidate for candidate in candidates if candidate.exists()), candidates[0])
 
     def browser_source_file_read_data(self) -> dict:
         if not self.browser_source_file.exists():

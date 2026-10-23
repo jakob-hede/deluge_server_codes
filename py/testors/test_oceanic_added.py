@@ -38,6 +38,8 @@ class LineRecordor(logging.Handler):
 
 class Testor:
     torrent_id = '0123456789abcdef0123456789abcdef01234567'
+    # a hybrid's v1 hash, the magnet's, when the daemon files the torrent under its v2, torrent_id above
+    v1_id = 'd1d96f75' * 5
     # the magnet's display name, which a bare magnet's added event carries, and the release's folder, the daemon's name
     # once the metadata is there, which names the copy
     magnet_name = 'The Florist (2026) [1080p] [YTS.GG]'
@@ -53,8 +55,9 @@ class Testor:
         self.loggor.addHandler(self.recordor)
         self.base: Path = Path()
         self.all_as_expected = True
-        # what the label stand-in saw, and whether it dies, in the case at hand
+        # what the label stand-in saw, the browser-source record it would read among it, and whether it dies
         self.label_calls: list[str] = []
+        self.records_read: list[str] = []
         self.is_label_dying = False
 
     @property
@@ -66,8 +69,10 @@ class Testor:
         return self.base / 'surveys' / f'{self.torrent_id}.yml'
 
     def label_by_hint(self, torrentor) -> None:
-        # stands in for Torrentor.label_by_hint, which talks to the daemon: one call recorded, its outcome kept
+        # stands in for Torrentor.label_by_hint, which talks to the daemon: one call recorded, with the browser-source
+        # record its lifted block would read, and its outcome kept
         self.label_calls.append(torrentor.torrent_name)
+        self.records_read.append(torrentor.browser_source_file.name)
         if self.is_label_dying:
             raise RuntimeError('daemon refused on purpose')
         torrentor.label_outcome = "set 'movin', read back 'movin'"
@@ -94,17 +99,22 @@ class Testor:
 
     def judge(self, event_name: str, torrent_name: str, details: tuple[str, ...], *, result: bool, labels: int,
               survey_event: str | None, lines: list[tuple[str, str]], card: dict | None = None,
-              is_torrentor_loaded: bool = True, survey_text: str | None = None):
+              is_torrentor_loaded: bool = True, survey_text: str | None = None, record_read: str | None = None):
         """survey_event: the event the survey names once the case ran, None for no survey; survey_text: the survey's
-        text as it must stand, for a survey the case laid down itself."""
+        text as it must stand, for a survey the case laid down itself; record_read: the browser-source record the
+        label would read, by default the torrent id's whenever the label runs."""
         hook = OceanicHook(self.torrent_id, torrent_name, self.location, self.loggor)
         self.recordor.lines.clear()
         self.label_calls.clear()
+        self.records_read.clear()
         RecordingNtfyAnnouncor.cards.clear()
         got = hook.process_event(event_name, *details)
         is_as_expected = got == result and len(self.label_calls) == labels
         print(f"result: {got}  expected {result}")
         print(f"label calls: {len(self.label_calls)}  expected {labels}")
+        expected_records = [record_read or f'{self.torrent_id}.yml'] * labels
+        print(f"browser-source records read: {self.records_read}  expected {expected_records}")
+        is_as_expected = is_as_expected and self.records_read == expected_records
 
         got_lines = [(level, self.shown(line)) for level, line in self.recordor.lines]
         expected_lines = [(level, self.shown(line)) for level, line in lines]
@@ -207,6 +217,43 @@ class Testor:
         finally:
             self.is_label_dying = False
 
+    def lay_record(self, torrent_id: str) -> None:
+        self.browser_source_dir.mkdir(parents=True, exist_ok=True)
+        (self.browser_source_dir / f'{torrent_id}.yml').write_text(f'infohash: {torrent_id}\nlabel_hint: movin\n')
+
+    @property
+    def browser_source_dir(self) -> Path:
+        return self.base / 'browser-source'
+
+    def case_added_hybrid_alternate(self):
+        # a hybrid the daemon files under its v2 hash: the plugin passes the v1, which names the click's record
+        self.torrentize()
+        self.lay_record(self.v1_id)
+        name = self.release_name
+        details = (self.v1_id,)
+        self.judge('oce_added', name, details, result=True, labels=1, survey_event='oce_added',
+                   record_read=f'{self.v1_id}.yml',
+                   lines=[self.hearing_line('oce_added', name, details),
+                          ('INFO', f"Browser-source record of '{name}' looked for by '{self.torrent_id}', "
+                                   f"then by '{self.v1_id}'"),
+                          ('INFO', f"Label of '{name}': set 'movin', read back 'movin'"),
+                          self.survey_line('oce_added', name)])
+
+    def case_added_hybrid_own_record_first(self):
+        # both records there: the torrent id's own is read, the alternate only after it
+        self.torrentize()
+        self.lay_record(self.torrent_id)
+        self.lay_record(self.v1_id)
+        name = self.release_name
+        details = (self.v1_id,)
+        self.judge('oce_added', name, details, result=True, labels=1, survey_event='oce_added',
+                   record_read=f'{self.torrent_id}.yml',
+                   lines=[self.hearing_line('oce_added', name, details),
+                          ('INFO', f"Browser-source record of '{name}' looked for by '{self.torrent_id}', "
+                                   f"then by '{self.v1_id}'"),
+                          ('INFO', f"Label of '{name}': set 'movin', read back 'movin'"),
+                          self.survey_line('oce_added', name)])
+
     # --- oce_metadata_received
 
     def case_metadata_copy_there(self):
@@ -254,6 +301,10 @@ class Testor:
              self.case_added_copy_there),
             ('oce_added, a bare magnet: no copy yet, the label once, no survey, the wait logged', self.case_added_no_copy),
             ('oce_added, the label dies: one error line, the survey written all the same', self.case_added_label_dies),
+            ("oce_added, a hybrid filed under its v2: the click's record found by the v1, the alternate id",
+             self.case_added_hybrid_alternate),
+            ("oce_added, a hybrid with both records: the torrent id's own read first",
+             self.case_added_hybrid_own_record_first),
             ("oce_metadata_received: the copy under the daemon's name, the survey on oce_metadata_received, no label",
              self.case_metadata_copy_there),
             ('oce_metadata_received, the survey already there: nothing written', self.case_metadata_survey_there),
