@@ -40,6 +40,7 @@ class Torrentor:
         self.base_sdir: str = base_sdir
         self.logger = DelugapiTorrentorLoggor()
         self.reaction_response: DelugApiResponse = None
+        self.label_outcome: str | None = None  # what label_by_hint did, for a caller that never sees its Deferred
         self.announcor = HookAnnouncor(self.logger)  # the one voice of whichever hook this process runs
 
     def process_event(self, event_name):
@@ -115,10 +116,10 @@ class Torrentor:
         data: dict = yaml.safe_load(browser_source_yaml)
         return data
 
-    def on_added(self) -> Deferred:
-        """Create a survey file when a torrent is added."""
-        self.logger.info(f"Torrent '{self.torrent_name}' has been added..")
-
+    def label_by_hint(self) -> Deferred | None:
+        """Set the label the click's browser-source hint names, unless a hand-set label is there, and read it back.
+        The Deferred when a reactor runs, as under the Twistor; None when this method ran the reactor itself, so the
+        outcome is kept in label_outcome too."""
         api_client: DelugapiClient = Commons.singleton.api_client
 
         @defer.inlineCallbacks
@@ -130,8 +131,10 @@ class Torrentor:
             label_hint = browser_source_data.get('label_hint') if browser_source_data else None
             if not browser_source_data:
                 self.logger.info(f"No browser-source file '{self.browser_source_file}', skipping label")
+                self.label_outcome = 'skipped, no browser-source file'
             elif label_hint not in ('movin', 'tv-in', 'tv-arc'):
                 self.logger.info(f"Browser-source label_hint '{label_hint}' is not a label, skipping label")
+                self.label_outcome = f"skipped, the hint '{label_hint}' is not a label"
             else:
                 self.logger.info(f"Browser-source label_hint '{label_hint}' from '{self.browser_source_file}'")
                 transaction = DelugApiStatusTransaction(torrent_id=self.torrent_id)
@@ -142,9 +145,11 @@ class Torrentor:
 
                 if delugapi_torrent is None:
                     self.logger.warning(f"No status for torrent '{self.torrent_id}', skipping label")
+                    self.label_outcome = f"skipped '{label_hint}', no status from the daemon"
                 elif delugapi_torrent.label:
                     self.logger.info(
                         f'Label "{delugapi_torrent.label}" already set, hand-set label wins, skipping "{label_hint}"')
+                    self.label_outcome = f"kept the hand-set '{delugapi_torrent.label}', skipped '{label_hint}'"
                 else:
                     self.logger.info(f'Setting label "{label_hint}" for "{delugapi_torrent.title}"')
                     transaction = DelugApiLabelTransaction(torrent_id=self.torrent_id, label=label_hint)
@@ -161,10 +166,40 @@ class Torrentor:
                     updated_torrent = transaction.delugapi_torrent_from_status()
                     current_label = updated_torrent.label if updated_torrent else None
                     self.logger.info(f"Current label: '{current_label}'")
+                    set_text = (f"error setting '{label_hint}': {transaction_response.error}"
+                                if transaction_response.error else f"set '{label_hint}'")
+                    self.label_outcome = f"{set_text}, read back '{current_label}'"
 
             if transaction is not None:
                 self.reaction_response.result = transaction.response.result
                 self.reaction_response.error = transaction.response.error
+            return reply
+
+        @defer.inlineCallbacks
+        def recorded_reactize() -> deferred_response:
+            # a caller whose reactor this method ran never sees the Deferred, so a death is kept for it, and raised on
+            try:
+                reply = yield reactize()
+            except Exception as exc:
+                self.label_outcome = f'died: {type(exc).__name__}: {exc}'
+                self.logger.error(f'Label step {self.label_outcome}')
+                raise
+            return reply
+
+        self.label_outcome = None
+        self.reaction_response = DelugApiResponse()
+        return DelugApi.delugapi_wrap(recorded_reactize)
+
+    def on_added(self) -> Deferred:
+        """Create a survey file when a torrent is added."""
+        self.logger.info(f"Torrent '{self.torrent_name}' has been added..")
+
+        api_client: DelugapiClient = Commons.singleton.api_client
+
+        @defer.inlineCallbacks
+        def reactize() -> deferred_response:
+            print('reactize')
+            reply = yield self.label_by_hint()
 
             # a magnet's copy is written only when the metadata arrives, under the name the daemon reports from then on
             torrent_file = None

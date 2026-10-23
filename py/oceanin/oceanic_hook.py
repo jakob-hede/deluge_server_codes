@@ -7,20 +7,23 @@ from executin.logge import Loggor, OceanorLoggor
 
 if TYPE_CHECKING:
     from executin.announcor import HookAnnouncor
+    from executin.torrentor import Torrentor
 
 
 class OceanicHook:
     """
     Oceanic's hook, which the runnor, oceanor.py, hands every oce_ event, the two logging to oceanic_action.log, and
     the one gate: the plugin spawns for every hearing it has. A ticked delete acts: oce_deleted and oce_delete_failed
-    clean the payload's folder in the movin library, tell Jellyfin, and say so in one DELETED card. Every other event
-    only logs, one line with its details: oce_removed, which every remove ends in, and the nine the plugin hears for
-    phase 4, oce_added, oce_finished, oce_folder_renamed, oce_file_renamed, oce_metadata_received,
-    oce_metadata_failed, oce_storage_moved, oce_storage_moved_failed and oce_file_rename_failed, whose lines are its
-    material while Execute still does the work. Only pathlib and the loggor are imported here: shutil, whose
-    compression modules weigh most of a megabyte, yaml, the announcor, the Jellyfin communicator and the video
-    suffixes are imported inside the methods that act, when they act, so a plain remove costs the interpreter and a
-    log line.
+    clean the payload's folder in the movin library, tell Jellyfin, and say so in one DELETED card. The added path
+    acts: oce_added sets the label the click's hint names and writes the survey when the daemon's copy of the torrent
+    is there, oce_metadata_received writes it when it is not yet, and oce_metadata_failed says so in one FAILED card,
+    all through the old Torrentor, its own lines in torrentor.log and the outcome here. Every other event only logs,
+    one line with its details: oce_removed, which every remove ends in, and the six the completion chain will act on,
+    oce_finished, oce_folder_renamed, oce_file_renamed, oce_storage_moved, oce_storage_moved_failed and
+    oce_file_rename_failed. Only pathlib and the loggor are imported here: shutil, whose compression modules weigh
+    most of a megabyte, yaml, the Torrentor with twisted and the daemon's client, the announcor, the naming, the
+    Jellyfin communicator and the video suffixes are imported inside the methods that act, when they act, so a plain
+    remove costs the interpreter and a log line.
     """
 
     # movin alone, by the operator's word of 2026-10-23: Jellyfin's other movie libraries, instream, kidstuff and
@@ -43,6 +46,7 @@ class OceanicHook:
         self.remove_outcome: str | None = None
         self.remove_leftovers: int | None = None
         self._announcor: HookAnnouncor | None = None
+        self._torrentor: Torrentor | None = None
 
     @property
     def announcor(self) -> HookAnnouncor:
@@ -50,6 +54,15 @@ class OceanicHook:
             from executin.announcor import HookAnnouncor  # deferred: the voice is loaded on the acting path only, or when the hook dies
             self._announcor = HookAnnouncor(self.loggor)
         return self._announcor
+
+    @property
+    def torrentor(self) -> Torrentor:
+        torrentor = self._torrentor
+        if torrentor is None:
+            from executin.torrentor import Torrentor  # deferred: twisted and the daemon's client load on the added path only
+            torrentor = Torrentor(self.torrent_id, self.torrent_name, self.base_sdir)
+            self._torrentor = torrentor
+        return torrentor
 
     def process_event(self, event_name: str, *extras: str) -> bool | None:
         if event_name == 'oce_removed':
@@ -84,10 +97,69 @@ class OceanicHook:
         self.loggor.info(f"Torrent '{self.torrent_name}' removed, id '{self.torrent_id}', location '{self.base_sdir}'")
         return True
 
-    # --- the hearings that only log, phase 4's material; Execute's added and completed rows still do the work
+    # --- the added path: the label, the survey, and a magnet whose metadata never came
 
     def on_added(self, *details: str) -> bool:
-        return self.log_hearing('oce_added', details)
+        # no detail. The label first, then the survey: a prefetched magnet, added as a file, has its copy written in the
+        # same daemon call as this event, a bare magnet only once its metadata comes, under the daemon's name from then
+        # on. No card: the click has its own
+        self.log_hearing('oce_added', details)
+        self.label_by_hint()
+        torrent_file = self.torrentor.torrent_file_for(self.torrent_name)
+        if torrent_file is None:
+            self.loggor.info(f"No torrent file for '{self.torrent_name}' in '{self.torrentor.torrents_dir}' yet, "
+                             f"the survey waits for oce_metadata_received")
+            return True
+        return self.write_survey(torrent_file, 'oce_added')
+
+    def on_metadata_received(self, *details: str) -> bool:
+        # no detail; the name is the daemon's, which names the copy Deluge has just written. No daemon call and no
+        # label, the label was set on oce_added. False when the survey should have been written and was not
+        self.log_hearing('oce_metadata_received', details)
+        survey_file = self.torrentor.survey_file
+        if survey_file.exists():
+            self.loggor.info(f"Survey of '{self.torrent_name}' already there, '{survey_file}', nothing written")
+            return True
+        torrent_file = self.torrentor.torrent_file_for(self.torrent_name)
+        if torrent_file is None:
+            self.loggor.warning(f"No torrent file for '{self.torrent_name}' in '{self.torrentor.torrents_dir}', "
+                                f"no survey written, left for the completion")
+            return False
+        return self.write_survey(torrent_file, 'oce_metadata_received')
+
+    def on_metadata_failed(self, *details: str) -> bool:
+        # the details: the error's text. A magnet whose metadata never came never becomes a torrent file, so no survey
+        # and no payload: a diversion, by the operator's word, one FAILED card, high
+        from executin.naming import HumanNamor
+
+        self.log_hearing('oce_metadata_failed', details)
+        error = details[0] if details else ''
+        announcor = self.announcor
+        lines = [f'metadata failed: {announcor.bold(error or "no error text")}', f'hash {announcor.bold(self.torrent_id)}']
+        announced = announcor.say('failed', f'FAILED: {HumanNamor.human_name(None, self.torrent_name)}', lines,
+                                  priority='high')
+        if announced:
+            self.loggor.info(f'Announced {announced}')
+        return True
+
+    def label_by_hint(self) -> None:
+        # the Torrentor runs the reactor itself here, so its outcome is read off it; a death is a line, and the survey
+        # goes on, the two being independent
+        torrentor = self.torrentor
+        try:
+            torrentor.label_by_hint()
+        except Exception as exc:
+            self.loggor.error(f"Label of '{self.torrent_name}': died: {type(exc).__name__}: {exc}")
+            return
+        self.loggor.info(f"Label of '{self.torrent_name}': {torrentor.label_outcome or 'no outcome kept'}")
+
+    def write_survey(self, torrent_file: Path, event_name: str) -> bool:
+        self.torrentor.survey_write(torrent_file, event_name)
+        self.loggor.info(f"Survey of '{self.torrent_name}' written on {event_name}, '{self.torrentor.survey_file}' "
+                         f"from '{torrent_file}'")
+        return True
+
+    # --- the hearings that only log, the completion chain's material; with Execute unticked nothing does their work
 
     def on_finished(self, *details: str) -> bool:
         return self.log_hearing('oce_finished', details)
@@ -99,13 +171,6 @@ class OceanicHook:
     def on_file_renamed(self, *details: str) -> bool:
         # the details: the file's index and its new name
         return self.log_hearing('oce_file_renamed', details)
-
-    def on_metadata_received(self, *details: str) -> bool:
-        return self.log_hearing('oce_metadata_received', details)
-
-    def on_metadata_failed(self, *details: str) -> bool:
-        # the details: the error's text
-        return self.log_hearing('oce_metadata_failed', details)
 
     def on_storage_moved(self, *details: str) -> bool:
         # the details: the path the storage moved to

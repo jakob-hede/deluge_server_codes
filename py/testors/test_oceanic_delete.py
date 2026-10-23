@@ -377,7 +377,8 @@ class Testor:
         self.all_as_expected = self.all_as_expected and is_quiet
 
     def case_logging(self, event_name: str, *details: str):
-        # a hearing that only logs, phase 4's material: one line with every detail, True, the disk untouched, no voice
+        # a hearing that only logs, the completion chain's material: one line with every detail, True, the disk
+        # untouched, no voice and no Torrentor
         folder = self.lay_out(self.movin / 'the.florist.2026', self.leftovers + ['the.florist.2026.mkv'])
         hook = self.hook('the.florist.2026', self.movin)
         self.recordor.lines.clear()
@@ -391,7 +392,9 @@ class Testor:
         print(f"lines as expected: {is_said}")
         is_quiet = hook._announcor is None
         print(f"the voice never loaded: {is_quiet}  expected True")
-        self.all_as_expected = self.all_as_expected and is_said and is_quiet
+        is_light = hook._torrentor is None
+        print(f"the Torrentor never loaded: {is_light}  expected True")
+        self.all_as_expected = self.all_as_expected and is_said and is_quiet and is_light
 
     def case_scan_raises(self):
         folder = self.lay_out(self.movin / 'the.florist.2026', self.leftovers)
@@ -452,15 +455,11 @@ class Testor:
             ('refused: a path climbing into the library with ..', self.case_climbing_path),
             ('oce_removed: one log line, nothing read, no voice', self.case_removed),
             ('a death: the scan raises, the FAILED card at its stage, raised on', self.case_scan_raises),
-            ('logs only: oce_added, no detail', lambda: self.case_logging('oce_added')),
             ('logs only: oce_finished, no detail', lambda: self.case_logging('oce_finished')),
             ('logs only: oce_folder_renamed, the old name and the new',
              lambda: self.case_logging('oce_folder_renamed', 'The.Florist.2026.1080p/', 'the.florist.2026/')),
             ('logs only: oce_file_renamed, the index and the new name',
              lambda: self.case_logging('oce_file_renamed', '0', 'the.florist.2026/the.florist.2026.mkv')),
-            ('logs only: oce_metadata_received, no detail', lambda: self.case_logging('oce_metadata_received')),
-            ("logs only: oce_metadata_failed, the error's text",
-             lambda: self.case_logging('oce_metadata_failed', 'Operation timed out')),
             ('logs only: oce_storage_moved, the new path',
              lambda: self.case_logging('oce_storage_moved', str(self.movin))),
             ("logs only: oce_storage_moved_failed, the error's text and the file's path",
